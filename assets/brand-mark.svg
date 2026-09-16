@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256.00 256.00">
+  <rect width="256" height="256" rx="48" fill="#ffffff"/>
+  <g transform="translate(28.00 28.00)">
+  <line x1="100.00" y1="100.00" x2="100.00" y2="32.00" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="148.08" y2="51.92" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="168.00" y2="100.00" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="148.08" y2="148.08" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="100.00" y2="168.00" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="51.92" y2="148.08" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="32.00" y2="100.00" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <line x1="100.00" y1="100.00" x2="51.92" y2="51.92" stroke="#303036" stroke-width="5.60" stroke-linecap="round"/>
+  <path d="M 100.00 20.75 L 111.25 32.00 L 100.00 43.25 L 88.75 32.00 Z" fill="#1a7c93"/>
+  <rect x="140.48" y="44.32" width="15.20" height="15.20" fill="#3A3A3E"/>
+  <path d="M 168.00 88.75 L 179.25 100.00 L 168.00 111.25 L 156.75 100.00 Z" fill="#1a7c93"/>
+  <rect x="140.48" y="140.48" width="15.20" height="15.20" fill="#3A3A3E"/>
+  <path d="M 100.00 156.75 L 111.25 168.00 L 100.00 179.25 L 88.75 168.00 Z" fill="#1a7c93"/>
+  <rect x="44.32" y="140.48" width="15.20" height="15.20" fill="#3A3A3E"/>
+  <path d="M 32.00 88.75 L 43.25 100.00 L 32.00 111.25 L 20.75 100.00 Z" fill="#1a7c93"/>
+  <rect x="44.32" y="44.32" width="15.20" height="15.20" fill="#3A3A3E"/>
+  <path d="M 100.00 83.00 L 117.00 100.00 L 100.00 117.00 L 83.00 100.00 Z" fill="#303036"/>
+</g>
+</svg>

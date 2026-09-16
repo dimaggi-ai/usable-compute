@@ -1,211 +1,126 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
+    <link rel="canonical" href="https://dimaggi-ai.github.io/usable-compute/">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DIMAGGI AI — Usable Compute</title>
-<meta name="description" content="Turning AI infrastructure investment into usable compute: a portfolio covering scheduling, networking, reliability, power, cooling, placement, and governed operations.">
-<link rel="canonical" href="https://dimaggi-ai.github.io/usable-compute/">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Usable Compute — AI infrastructure models, standards, and decision frameworks">
-<meta property="og:description" content="Turning AI infrastructure investment into usable compute through networking, scheduling, reliability, power, cooling, placement, and governed operations.">
-<meta property="og:url" content="https://dimaggi-ai.github.io/usable-compute/">
-<meta property="og:image" content="https://dimaggi-ai.github.io/usable-compute/assets/covers/linkedin-v2.jpg">
-<meta property="og:image:type" content="image/jpeg">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="627">
-<meta property="og:image:alt" content="Usable Compute — AI infrastructure models, standards, and decision frameworks. Restrained illustration of connected infrastructure layers.">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Usable Compute — AI infrastructure models, standards, and decision frameworks">
-<meta name="twitter:description" content="Turning AI infrastructure investment into usable compute.">
-<meta name="twitter:image" content="https://dimaggi-ai.github.io/usable-compute/assets/covers/linkedin-v2.jpg">
-<meta name="twitter:image:alt" content="Usable Compute — AI infrastructure models, standards, and decision frameworks. Restrained illustration of connected infrastructure layers.">
-<style>
-:root {
-  color-scheme: dark;
-  --bg: #121419; --fg: #e3e9ff; --muted: #b5bed2;
-  --line: #343d58; --card: #181d2c; --accent: #b8c5ed;
-  --accent-soft: #202b50; --code: #0a1031; --codefg: #e3e9ff;
-}
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 24px; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-.wrap { width: min(1180px, calc(100% - 64px)); margin: auto; padding: 0 0 56px; }
-.site-nav { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--line); }
-.site-nav .brand { color: var(--fg); font-size: 15px; font-weight: 700; letter-spacing: .18em; text-decoration: none; }
-.site-nav .links { display: flex; flex-wrap: wrap; gap: 24px; }
-.site-nav .links a { font-size: 14px; text-decoration: none; }
-header { padding: 64px 0 48px; }
-h1 { max-width: 22ch; font-size: clamp(2rem,4.2vw,3.5rem); line-height: 1.12; margin: 0 0 24px; letter-spacing: -.035em; }
-.lede { font-size: 1.125rem; color: var(--muted); max-width: 72ch; margin: 0; }
-.eq { max-width: 100%; margin-top: 28px; padding: 16px 0; border-block: 1px solid var(--line); color: var(--muted); font-size: .94rem; overflow-wrap: anywhere; }
-.eq b { color: var(--fg); }
-section { padding: 40px 0; }
-h2 { font-size: clamp(1.5rem,2.4vw,2rem); margin: 0 0 12px; letter-spacing: -.025em; line-height: 1.25; }
-.sub { color: var(--muted); margin: 0 0 24px; max-width: 72ch; }
-.grid { border-top: 1px solid var(--line); }
-.card { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.6fr); gap: 40px; padding: 28px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
-.card .t { font-weight: 650; font-size: 1.125rem; line-height: 1.4; margin: 0; }
-.card .d { color: var(--muted); font-size: 1rem; margin: 0; max-width: 72ch; }
-.tag { display: table; margin-top: 10px; color: var(--accent); border: 1px solid var(--line); padding: 2px 8px; border-radius: 4px; font: 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
-.tools { display: grid; gap: 24px; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.tools > div { min-width: 0; display: flex; flex-direction: column; padding: 24px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
-.tools .d { color: var(--muted); line-height: 1.5; padding-bottom: 16px; }
-.tools b { color: var(--fg); }
-pre { margin: auto 0 0; max-width: 100%; padding: 16px; overflow-x: auto; background: var(--code); color: var(--codefg); border-radius: 4px; font: 13px/1.8 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; tab-size: 2; }
-.prose { border-top: 1px solid var(--line); }
-.prose p { line-height: 1.8; }
-footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: .875rem; max-width: 90ch; }
-a { color: var(--accent); text-underline-offset: 4px; }
-:focus-visible { outline: 2px solid #ff982e; outline-offset: 5px; }
-.skip-link { position: absolute; left: 16px; top: -80px; padding: 12px; background: var(--code); z-index: 2; }
-.skip-link:focus { top: 8px; }
-@media (hover:hover) { .card:hover .t, a:hover { color: #ffac52; } }
-@media (max-width:720px) {
-  .wrap { width: calc(100% - 40px); }
-  .site-nav { align-items: flex-start; flex-direction: column; gap: 16px; padding: 20px 0; }
-  .site-nav .links { gap: 24px; }
-  header { padding: 40px 0 24px; }
-  h1 { max-width: 22ch; }
-  .lede { font-size: 1rem; }
-  section { padding: 28px 0; }
-  .card { grid-template-columns: minmax(0,1fr); gap: 12px; padding: 24px 0; }
-  .tag { display: inline-block; margin: 0 0 0 8px; vertical-align: middle; }
-  .tools { grid-template-columns: minmax(0,1fr); gap: 16px; }
-  .tools > div { padding: 20px; }
-}
-@media (prefers-reduced-motion:reduce) { html { scroll-behavior: auto; } }
-</style>
+<title>Integrated infrastructure | DIMAGGI AI</title>
+<meta name="description" content="Simulation tools and validators for compute capacity, networking, placement and recovery.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" type="image/x-icon" href="assets/favicon-rounded-v2.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="assets/favicon-rounded-v2.png" sizes="32x32">
+<link rel="icon" type="image/svg+xml" href="assets/favicon-rounded-v2.svg" sizes="any">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-rounded-v2.png">
+<script src="theme.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="wrap">
-  <nav class="site-nav" aria-label="Usable Compute navigation">
-    <a class="brand" href="https://dimaggi.ai">DIMAGGI AI</a>
-    <div class="links"><a href="#series">Series</a><a href="#tools">Tools</a><a href="#method">Method</a><a href="https://github.com/dimaggi-ai/usable-compute">GitHub ↗</a></div>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a class="brand" href="https://dimaggi.ai/"><img src="assets/brand-mark.svg" width="44" height="44" alt="">DIMAGGI AI</a>
+    <div class="links"><a href="#series">Tools</a><a href="https://github.com/dimaggi-ai/usable-compute">GitHub ↗</a><button class="theme-toggle" type="button" aria-label="Dark theme" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4a8.5 8.5 0 1 0 11.5 11.5Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button></div>
   </nav>
   <main id="main">
   <header>
-    <h1>Usable Compute</h1>
-    <p class="sub">AI infrastructure models, standards, and decision frameworks.</p>
-    <p class="lede">An open, reproducible research program on the layers that decide how much of an AI cluster actually does useful work — and why fixing them usually beats buying more GPUs. Every result is seeded, tested, adversarially reviewed, and honest about what a skeptic should attack.</p>
-    <div class="eq">usable&nbsp;=&nbsp;nominal&nbsp;×&nbsp;<b>network</b>&nbsp;×&nbsp;<b>scheduling</b>&nbsp;×&nbsp;<b>recovery</b>&nbsp;×&nbsp;<b>placement</b>, under a governance layer</div>
+    <h1>Integrated infrastructure</h1>
+    <p class="lede">Compare infrastructure choices with simulation tools and validators. Inspect the assumptions, run the code and check the results.</p>
   </header>
 
   <section id="series" class="" aria-labelledby="series-title">
-  <h2 id="series-title">The series</h2>
-  <p class="sub">Each repository isolates one factor, in the field's own metrics, with a runnable artifact.</p>
+  <h2 id="series-title">Infrastructure tools</h2>
+  <p class="sub">Each tool addresses a specific decision. Source figures and explanations are under Technical evidence.</p>
   <div class="grid">
-    <a class="card" href="https://github.com/dimaggi-ai/network-vs-more-gpus">
-      <p class="t">GPU Cluster Networking</p>
-      <p class="d">Past a scale threshold, interconnect bandwidth — not GPU count — caps AI training throughput.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/scheduler-vs-more-gpus">
-      <p class="t">GPU Cluster Scheduling <span class="tag">paper</span></p>
-      <p class="d">Allocation is where capacity is realized or lost. Three policies face an identical Meta-calibrated job stream through power contraction, node failures, and inference surges: an intent-based closed loop realizes 85.8% of the envelope where a rigid FIFO-plus-backfill configuration realizes 77.8% — ~78 GPUs' worth on a 1,024-GPU cluster, recovered without buying anything, while inference SLO attainment <i>rises</i> from 0.968 to 0.998. Priority tiers alone recover almost nothing. The largest single source is mundane: refusing to peak-provision inference.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/ai-cluster-chaos-fidelity">
-      <p class="t">Chaos Fidelity Standard <span class="tag">standard · pip</span></p>
-      <p class="d">A machine-checkable standard for which fault injection tests which layer. A pod kill is not an XID; tc/netem is not an InfiniBand flap.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/reliability-economics">
-      <p class="t">Reliability Economics</p>
-      <p class="d">Which recovery policy wins in which failure regime — a phase diagram in ETTR and dollars, validated against Meta's published reliability numbers.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/governed-autonomy">
-      <p class="t">Governed Autonomy <span class="tag">pip</span></p>
-      <p class="d">An autonomous control plane over clusters and networks: separated planes, a referee, an autonomy ladder earned by chaos experiments, and a sourced latency hierarchy from human intent to nanosecond in-ASIC reflexes.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/compute-power-placement">
-      <p class="t">Compute↔Power Placement</p>
-      <p class="d">When does moving a job to cheaper power beat staying? Energy is ~3% of GPU-hour cost — so schedule against scarcity, don't arbitrage the spread. A fleet model prices the scheduler against itself with its ranking removed: ranking the curtailment hours by price wins in every simulated price year, and the headline saving is bound by the assumed spike ceiling — 4.8% at $5,000/MWh, 2.7% at ERCOT's $2,000 real-time cap.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/edge-continuum-placement">
-      <p class="t">Edge↔Neocloud Placement <span class="tag">pip</span></p>
-      <p class="d">Where AI workloads belong on the operator's footprint — tower, hub, metro PoP, central factory. The tower is never the recommended tier; latency is the weakest edge argument; fronthaul (~20 km), data gravity, and sovereignty do the actual forcing.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/airan-neocloud-resiliency">
-      <p class="t">AI-RAN ↔ Neocloud Resiliency <span class="tag">pip</span></p>
-      <p class="d">The last mile priced in nines: a single-fiber edge site is a ~2.7-nines site; multi-transport bonding helps only the tenant classes; the generator — not a third link — buys the decisive nine.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/cooling-pue-ladder">
-      <p class="t">Cooling &amp; the PUE Ladder <span class="tag">pip</span></p>
-      <p class="d">Heat out, priced in PUE, megawatts, and seconds: a 120 kW rack leaves only two rungs standing; a PUE point converts to ~1.9 MW of unqueued capacity per 10 MW feed; and one adoption mechanism reproduces the survey "plateau" and hyperscale ~1.1 fleets at once.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/span-contract">
-      <p class="t">The Span Admission Contract <span class="tag">scale-across · pip</span></p>
-      <p class="d">An admission contract for jobs that cross a hall boundary: probe &rarr; measurement &rarr; envelope &rarr; verdict, with synchronous training capped at the two tightest span classes. The verdict flips out of a measured delay, not a config knob &mdash; the same job admits at 40&nbsp;km and is refused at 400. Four tenant predicates (1.1.0) refuse an organization that has spent its slice quota or two organizations on one wavelength; an envelope that declares no tenancy is admitted with the unchecked lines printed, not refused.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/optical-circuit-intent">
-      <p class="t">Optical Circuit Intent <span class="tag">scale-across · pip</span></p>
-      <p class="d">What to ask a reconfigurable optical plant for, and what it costs: vendor-neutral verbs, a retune legality ladder with an exact piecewise cost, a thermal-drift ledger, and failover that verifies the replacement circuit before tearing the old one down. Since 1.1.0, read against one measured link &mdash; the HEDGE testbed&rsquo;s raw transponder and iperf logs, fetched and SHA-pinned &mdash; where the physical layer&rsquo;s uncorrectable-FEC alarm ran 88 s and 39 s ahead of an outage that began inside the transponder poll in which the last wavelength failed, and every failing wavelength&rsquo;s drop was closer to the 20 dB per decade branch than to the 10 dB default the drift model shipped with, and steeper than both. Since 1.2.0, bound to one documented controller interface &mdash; the TAPI 2.1.5 data tree under the TR-547 v1.2 agreement &mdash; with every call handed back rather than sent, and the one mock it has been run through pinned where it departs from the agreement, in ten places.</p></a>
-    <a class="card" href="https://github.com/dimaggi-ai/slice-packer-torus">
-      <p class="t">Slice-Packing a Torus Pod <span class="tag">scale-across · pip</span></p>
-      <p class="d">The allocation layer of a torus pod &mdash; packing, cordon, re-embedding, tenancy, reconstitution &mdash; anchored by the series&rsquo; first fleet measurement: Titan&rsquo;s 30,207 GPUs (100,889 GPU-years). Ranking cohorts by hazard captures 55% of held-out deaths on a 30% budget, yet the eviction inequality says preemption pays only when a drain costs under ~3% of a rebuild: spend hazard estimates on placement, not eviction.</p></a>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t"><a href="https://github.com/dimaggi-ai/network-vs-more-gpus">GPU Cluster Networking</a></h3>
+      <p class="d">Training workers wait when they cannot exchange results quickly enough. Compare communication costs and workload placement in a modeled GPU cluster.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> Start with the left chart: lower lines mean less time to finish a training step. A value of 1 means the same time as running inside one compute hall. Solid lines keep communicating workers grouped together; dashed lines interleave them between halls. The right chart shows how adding more participants to a communication ring can increase the delay in the modeled case.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/network-vs-more-gpus-781b349c4b7e.png" target="_blank" rel="noopener" aria-label="Open full-size figure for network-vs-more-gpus"><img class="problem-figure" src="figures/network-vs-more-gpus-781b349c4b7e.png" width="2477" height="1021" loading="lazy" decoding="async" alt="Modeled training comparison. Two halls and a 400 Gbit/s circuit. Step time is relative to hall-local execution; rank placement and ring size vary."></a>
+      <figcaption><strong>Modeled training comparison.</strong> Two halls and a 400 Gbit/s circuit. Step time is relative to hall-local execution; rank placement and ring size vary.<span class="figure-links"><a href="figures/network-vs-more-gpus-781b349c4b7e.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/network-vs-more-gpus/blob/781b349c4b7e225d3988031421183730a0e394ee/figures/fig8_placement_not_distance.png">Source figure</a><a href="https://github.com/dimaggi-ai/network-vs-more-gpus/blob/781b349c4b7e225d3988031421183730a0e394ee/figures/make_span_figures.py">Method</a></span></figcaption>
+      </figure></article>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t"><a href="https://github.com/dimaggi-ai/scheduler-vs-more-gpus">GPU Cluster Scheduling <span class="tag">paper</span></a></h3>
+      <p class="d">Compare how scheduling policies use the same GPU pool under power limits, failures and changing demand.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> Each bar represents a different rule for sharing the same processor pool. A shorter bar means less capacity left unused or lost. The colored sections separate idle time, unused reservations, and training overhead or lost work. The percentages above the bars show how much of the available capacity the simulated policy turns into productive work.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/scheduler-vs-more-gpus-2d5f3647aa4b.png" target="_blank" rel="noopener" aria-label="Open full-size figure for scheduler-vs-more-gpus"><img class="problem-figure" src="figures/scheduler-vs-more-gpus-2d5f3647aa4b.png" width="1200" height="750" loading="lazy" decoding="async" alt="Simulated scenario S4. 1,024 GPUs over 30 days, with power constraints, failures and inference surges. Reservation tracking and elasticity change together."></a>
+      <figcaption><strong>Simulated scenario S4.</strong> 1,024 GPUs over 30 days, with power constraints, failures and inference surges. Reservation tracking and elasticity change together.<span class="figure-links"><a href="figures/scheduler-vs-more-gpus-2d5f3647aa4b.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/scheduler-vs-more-gpus/blob/2d5f3647aa4bc50b1dbfdd6b346ec96142d1ceb4/figures/stranded_breakdown.png">Source figure</a><a href="https://github.com/dimaggi-ai/scheduler-vs-more-gpus/blob/2d5f3647aa4bc50b1dbfdd6b346ec96142d1ceb4/sim/run.py">Method</a></span></figcaption>
+      </figure></article>
+    <article class="card text-only" id="tools"><div class="card-copy">
+      <h3 class="t" id="ai-cluster-chaos-fidelity-title"><a href="https://github.com/dimaggi-ai/ai-cluster-chaos-fidelity">Chaos Fidelity Standard <span class="tag">standard · pip</span></a></h3>
+      <p class="d">Check whether a failure experiment tests the part of the system it claims to test.</p></div>
+      <pre class="install-command" tabindex="0" aria-labelledby="ai-cluster-chaos-fidelity-title">pip install ai-cluster-chaos-fidelity
+chaos-fidelity my-experiment.yaml</pre></article>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t"><a href="https://github.com/dimaggi-ai/reliability-economics">Reliability Economics</a></h3>
+      <p class="d">Compare the cost of saving checkpoints with the work lost after failures, including spare capacity and recovery choices.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> Read from left to right as the time between saves increases. The vertical axis shows wasted processor-hours over a month; lower is better. The low point marks the best interval among those tested in this simulation. It is not a recommended save interval for every training job.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/reliability-economics-747207eb158d.png" target="_blank" rel="noopener" aria-label="Open full-size figure for reliability-economics"><img class="problem-figure" src="figures/reliability-economics-747207eb158d.png" width="990" height="660" loading="lazy" decoding="async" alt="Simulated checkpoint sweep. 16,384 GPUs over 30 days, with 16 spare nodes. The displayed optimum applies to this failure model and checkpoint policy."></a>
+      <figcaption><strong>Simulated checkpoint sweep.</strong> 16,384 GPUs over 30 days, with 16 spare nodes. The displayed optimum applies to this failure model and checkpoint policy.<span class="figure-links"><a href="figures/reliability-economics-747207eb158d.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/reliability-economics/blob/747207eb158dedacb5e0fc6674b4d5cefcc79fff/figures/checkpoint_optimum.png">Source figure</a><a href="https://github.com/dimaggi-ai/reliability-economics/blob/747207eb158dedacb5e0fc6674b4d5cefcc79fff/sim/run.py">Method</a></span></figcaption>
+      </figure></article>
+    <article class="card text-only"><div class="card-copy">
+      <h3 class="t" id="governed-autonomy-title"><a href="https://github.com/dimaggi-ai/governed-autonomy">Governed Autonomy <span class="tag">pip</span></a></h3>
+      <p class="d">Check evidence and independent approval before increasing software control over infrastructure. This tool evaluates records; it does not execute changes.</p></div>
+      <pre class="install-command" tabindex="0" aria-labelledby="governed-autonomy-title">pip install governed-autonomy-gate
+promotion-gate my-record.yaml</pre></article>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t"><a href="https://github.com/dimaggi-ai/compute-power-placement">Compute↔Power Placement</a></h3>
+      <p class="d">Compare keeping a workload in place, splitting it between sites or moving it. Account for power costs, available capacity, communication and deadlines.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> The left chart compares modeled dollars per useful processor-hour; lower bars cost less. Splitting work between sites has different costs depending on how the parts communicate. On the right, each colored area shows the model’s choice as shortages of machines and expensive-power hours change. Those choices depend on the scenario below.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/compute-power-placement-fb9564693dde.png" target="_blank" rel="noopener" aria-label="Open full-size figure for compute-power-placement"><img class="problem-figure" src="figures/compute-power-placement-fb9564693dde.png" width="1725" height="690" loading="lazy" decoding="async" alt="Modeled placement comparison. The right-hand scenario uses a 200-hour deadline and an away hall holding 60% of the job. Costs and decisions depend on these inputs."></a>
+      <figcaption><strong>Modeled placement comparison.</strong> The right-hand scenario uses a 200-hour deadline and an away hall holding 60% of the job. Costs and decisions depend on these inputs.<span class="figure-links"><a href="figures/compute-power-placement-fb9564693dde.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/compute-power-placement/blob/fb9564693ddef3a95850d853dd2cd1b77b4c22d8/figures/stay_stitch_move.png">Source figure</a><a href="https://github.com/dimaggi-ai/compute-power-placement/blob/fb9564693ddef3a95850d853dd2cd1b77b4c22d8/span/run.py">Method</a></span></figcaption>
+      </figure></article>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t" id="edge-continuum-placement-title"><a href="https://github.com/dimaggi-ai/edge-continuum-placement">Edge↔Neocloud Placement <span class="tag">pip</span></a></h3>
+      <p class="d">Check which locations meet a workload’s stated network, power, latency and data-location requirements.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> Each row is a type of AI job. Columns move from a small local site to a central facility. REC marks the model’s recommended location; OK means it meets the requirements. A dollar sign flags added backhaul cost, the cost of carrying data to another site. Blocked cells name the failed check: F network, P power, L response time or G data location.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/edge-continuum-placement-12448a811889.png" target="_blank" rel="noopener" aria-label="Open full-size figure for edge-continuum-placement"><img class="problem-figure" src="figures/edge-continuum-placement-12448a811889.png" width="1140" height="840" loading="lazy" decoding="async" alt="Declared-profile evaluation. Twelve workload profiles evaluated against four tier envelopes. Letters identify the constraint that blocks a placement."></a>
+      <figcaption><strong>Declared-profile evaluation.</strong> Twelve workload profiles evaluated against four tier envelopes. Letters identify the constraint that blocks a placement.<span class="figure-links"><a href="figures/edge-continuum-placement-12448a811889.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/edge-continuum-placement/blob/12448a811889f444126f6282ab0a1a4859bf41fd/figures/placement_matrix.png">Source figure</a><a href="https://github.com/dimaggi-ai/edge-continuum-placement/blob/12448a811889f444126f6282ab0a1a4859bf41fd/run.py">Method</a></span></figcaption>
+      </figure>
+      <pre class="install-command" tabindex="0" aria-labelledby="edge-continuum-placement-title">pip install edge-continuum-placement
+edge-placement evaluate -w frontier-pretrain -t tower  # exit 1</pre></article>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t" id="airan-neocloud-resiliency-title"><a href="https://github.com/dimaggi-ai/airan-neocloud-resiliency">AI-RAN ↔ Neocloud Resiliency <span class="tag">pip</span></a></h3>
+      <p class="d">Compare simulated downtime under different power, connectivity and timing failures, with alternative resilience measures.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> Each bar shows simulated downtime in hours per year; shorter is better. Orange is power loss, blue is lost connectivity and purple is lost timing. P0 uses one fiber connection. P3 adds backup connections; P4 also adds a generator, a more resilient clock and local control. R0 is radio traffic; R2 is tenant AI traffic. Compare the same class between packages: a smaller blue section does not necessarily reduce the orange one.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/airan-neocloud-resiliency-13349ea4a088.png" target="_blank" rel="noopener" aria-label="Open full-size figure for airan-neocloud-resiliency"><img class="problem-figure" src="figures/airan-neocloud-resiliency-13349ea4a088.png" width="1080" height="630" loading="lazy" decoding="async" alt="Simulated downtime breakdown. 2,000 simulated years per policy, seed 7. Fault sources are isolated in separate runs; overlapping failures make the split approximate."></a>
+      <figcaption><strong>Simulated downtime breakdown.</strong> 2,000 simulated years per policy, seed 7. Fault sources are isolated in separate runs; overlapping failures make the split approximate.<span class="figure-links"><a href="figures/airan-neocloud-resiliency-13349ea4a088.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/airan-neocloud-resiliency/blob/13349ea4a088c43f93b2100fd408e25a87a0bd93/figures/downtime_split.png">Source figure</a><a href="https://github.com/dimaggi-ai/airan-neocloud-resiliency/blob/13349ea4a088c43f93b2100fd408e25a87a0bd93/run.py">Method</a></span></figcaption>
+      </figure>
+      <pre class="install-command" tabindex="0" aria-labelledby="airan-neocloud-resiliency-title">pip install airan-neocloud-resiliency
+airan-resiliency ladder</pre></article>
+    <article class="card has-figure"><div class="card-copy">
+      <h3 class="t" id="cooling-pue-ladder-title"><a href="https://github.com/dimaggi-ai/cooling-pue-ladder">Cooling &amp; the PUE Ladder <span class="tag">pip</span></a></h3>
+      <p class="d">Compare cooling options, rack power limits and facility power overhead under declared conditions.</p></div><details class="technical-evidence"><summary>Technical evidence</summary><p class="image-guide"><strong>How to read this chart.</strong> Bars use the left axis: taller bars mean the assumed cooling system can support more power per rack. Lines use the right axis and show PUE, total facility power divided by power used by computing equipment. Closer to 1 means less overhead. The two lines compare climates; they are modeled conditions, not measured sites.</p></details><figure class="source-figure">
+      <a class="figure-image-link" href="figures/cooling-pue-ladder-cb4323c13819.png" target="_blank" rel="noopener" aria-label="Open full-size figure for cooling-pue-ladder"><img class="problem-figure" src="figures/cooling-pue-ladder-cb4323c13819.png" width="1350" height="750" loading="lazy" decoding="async" alt="Modeled cooling comparison. Declared density ceilings and evaporative-cooling assumptions for cold and hot-humid conditions. These are model inputs and outputs, not a measured fleet."></a>
+      <figcaption><strong>Modeled cooling comparison.</strong> Declared density ceilings and evaporative-cooling assumptions for cold and hot-humid conditions. These are model inputs and outputs, not a measured fleet.<span class="figure-links"><a href="figures/cooling-pue-ladder-cb4323c13819.png" target="_blank" rel="noopener">Full-size figure ↗</a><a href="https://github.com/dimaggi-ai/cooling-pue-ladder/blob/cb4323c138191b30ad53d26a72344f055050fa9f/figures/ladder.png">Source figure</a><a href="https://github.com/dimaggi-ai/cooling-pue-ladder/blob/cb4323c138191b30ad53d26a72344f055050fa9f/run.py">Method</a></span></figcaption>
+      </figure>
+      <pre class="install-command" tabindex="0" aria-labelledby="cooling-pue-ladder-title">pip install cooling-pue-ladder
+pue-ladder gate --density 120 --rung contained-air  # exit 1</pre></article>
+    <article class="card text-only"><div class="card-copy">
+      <h3 class="t" id="span-contract-title"><a href="https://github.com/dimaggi-ai/span-contract">The Span Admission Contract <span class="tag">scale-across · pip</span></a></h3>
+      <p class="d">Check a proposed workload against declared network constraints. The result includes missing evidence alongside the decision.</p></div>
+      <pre class="install-command" tabindex="0" aria-labelledby="span-contract-title">pip install span-contract
+spancontract validate envelope.json</pre></article>
+    <article class="card text-only"><div class="card-copy">
+      <h3 class="t" id="optical-circuit-intent-title"><a href="https://github.com/dimaggi-ai/optical-circuit-intent">Optical Circuit Intent <span class="tag">scale-across · pip</span></a></h3>
+      <p class="d">Check a proposed optical-circuit change against network limits and workload timing requirements. The tool does not change the network.</p></div>
+      <pre class="install-command" tabindex="0" aria-labelledby="optical-circuit-intent-title">pip install optical-circuit-intent
+ocintent ladder</pre></article>
+    <article class="card text-only"><div class="card-copy">
+      <h3 class="t" id="slice-packer-torus-title"><a href="https://github.com/dimaggi-ai/slice-packer-torus">Slice-Packing a Torus Pod <span class="tag">scale-across · pip</span></a></h3>
+      <p class="d">Explore how failures and maintenance affect connected allocations in a torus network, whose opposite edges connect.</p></div>
+      <pre class="install-command" tabindex="0" aria-labelledby="slice-packer-torus-title">pip install slice-packer-torus
+slicepacker cordon --shape 16,16,16</pre></article>
   </div>
 
   </section>
-  <section id="tools" class="" aria-labelledby="tools-title">
-  <h2 id="tools-title">Tools you can install</h2>
-  <p class="sub">The standards ship as commands, not just prose — run them in your own CI.</p>
-  <div class="tools">
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Chaos-fidelity linter</b> — reject a wrong-layer chaos experiment:</p>
-      <pre tabindex="0">pip install ai-cluster-chaos-fidelity
-chaos-fidelity my-experiment.yaml</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Autonomy promotion gate</b> — refuse an unearned autonomy promotion:</p>
-      <pre tabindex="0">pip install governed-autonomy-gate
-promotion-gate my-record.yaml</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Placement gate</b> — block an edgeward placement no gate forces:</p>
-      <pre tabindex="0">pip install edge-continuum-placement
-edge-placement evaluate -w frontier-pretrain -t tower  # exit 1</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Resilience ladder</b> — price the next nine before buying it:</p>
-      <pre tabindex="0">pip install airan-neocloud-resiliency
-airan-resiliency ladder</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Cooling density gate</b> — block a rack no rung can cool:</p>
-      <pre tabindex="0">pip install cooling-pue-ladder
-pue-ladder gate --density 120 --rung contained-air  # exit 1</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Span admission contract</b> — refuse a cross-hall launch the facts don&rsquo;t support:</p>
-      <pre tabindex="0">pip install span-contract
-spancontract validate envelope.json</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Retune legality ladder</b> — when a circuit retune is invisible, and when it stalls the job:</p>
-      <pre tabindex="0">pip install optical-circuit-intent
-ocintent ladder</pre>
-    </div>
-    <div>
-      <p class="d" style="margin:0 0 8px"><b>Torus cordon pricer</b> — what one chip failure costs, by where it lands:</p>
-      <pre tabindex="0">pip install slice-packer-torus
-slicepacker cordon --shape 16,16,16</pre>
-    </div>
-  </div>
 
-  </section>
   <section id="validation" class="prose" aria-labelledby="validation-title">
-  <h2 id="validation-title">How the claims are checked</h2>
-  <p class="sub" style="max-width:72ch">Every repository ships a validation program that CI runs on each push, and every finding is filed under one of three kinds, labeled in the output: <b>calibrated</b> — pinned to a published figure, where passing proves the model has not drifted from its citation, not that it predicts; <b>emergent</b> — results the model was not tuned to produce, required to survive independent reseeding; and <b>sanity</b> — properties of the model's own structure, citing no evidence and claiming none.</p>
-  <p class="sub" style="max-width:72ch">Every registry now adds two things: it prints the anchors it does <i>not</i> provide, so an uncalibrated input cannot pass for a result, and its test suite breaks the model on purpose — delete a placement gate, delete the power chain, switch off the price spikes, freeze a fleet so it never modernizes — and requires named points to go red, against a control proving the unmutated registry is green.</p>
-  <p class="sub" style="max-width:72ch">That is not decoration. In the most recent pass it caught a generator threshold chosen after seeing the number (it failed on reseeding, and was replaced by an ordering with nothing to tune), a tie between transport options stated as a maximum rather than a mean (same fix), a latency registry that passed with three of its four gates deleted, and a concentration figure that was identical under every scheduling policy — a fact about the electricity market being reported as a result about the scheduler.</p>
-  <p class="sub" style="max-width:72ch">The sharpest case came from the cooling study: its held-out 2024 prediction had a band wide enough that a simulated fleet <i>frozen at its 2014 stock</i> — no modernization at all for a decade — cleared it on 19 of 24 random seeds. The published run happened to land on a seed where it failed, so nothing looked wrong. The band was narrowed until it is disjoint from the calibration anchor and the null model now fails on every seed. In the same pass a scheduling point that compared a pinned constant to itself was renamed to say so, and both repositories now disclose that their failure models are unconstrained by roughly an order of magnitude. Each was rewritten in public rather than quietly kept.</p>
-
-  </section>
-  <section id="method" class="prose" aria-labelledby="method-title">
-  <h2 id="method-title">The method</h2>
-  <p class="sub" style="max-width:72ch">Machine-checkable where possible; calibrated to primary sources and cross-checked against published fleet data; conditional claims with a stated "what a skeptic should attack"; and each result adversarially reviewed before release. The goal is not a slogan but a body of work an engineer can run and a reviewer can trust.</p>
-
+  <h2 id="validation-title">Inspect the evidence</h2>
+  <p class="sub">The joined-capacity model has an <a href="https://github.com/dimaggi-ai/usable-compute/blob/main/evidence.json">evidence manifest</a> recording assumptions, sources and scope. It distinguishes scenario choices from empirical measurements.</p>
   </section>
   <section id="plant" class="prose" aria-labelledby="plant-title">
-  <h2 id="plant-title">Run it on your plant</h2>
-  <p class="sub" style="max-width:72ch">Every repository above installs with pip, exits 0, 1 or 2 on your own inputs, and re-runs its validation registry in your CI, declined list first. What the repositories cannot do alone is the step that needs your data: a span contract wired to your scheduler&rsquo;s delay node, an intent bound to your controller&rsquo;s own service interface points, a drift forecast read from your transponder logs rather than a laboratory&rsquo;s. That work is offered as a retainer, not a product: install it, run it in your CI, and ask for it to be wired to your plant. What comes back is held to the rules on this page &mdash; every number printed by committed code, calibrated where a source exists, declined where none does &mdash; and written up so your own reviewers can attack it. Enquiries through <a href="https://dimaggi.ai">dimaggi.ai</a>.</p>
-
+  <h2 id="plant-title">Discuss your infrastructure</h2>
+  <p class="sub">Tell us about your workload, network constraint or placement decision. <a href="https://dimaggi.ai/contact">Contact DIMAGGI AI</a>.</p>
   </section>
   </main>
   <footer>
     Margaret (Maggie) Nanyonga — Founder &amp; Principal Architect, DIMAGGI AI ·
     <a href="https://dimaggi.ai">dimaggi.ai</a> ·
     <a href="https://github.com/dimaggi-ai">github.com/dimaggi-ai</a><br>
-    Governed AI infrastructure: the control, reliability, and audit layer for autonomous systems operating production networks and compute.
+    AI infrastructure models and tools.
   </footer>
 </div>
 </body>
