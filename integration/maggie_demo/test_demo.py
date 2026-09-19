@@ -1,6 +1,7 @@
 """Verify the composed artifact, preserved baseline and non-executable claims."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -8,7 +9,7 @@ import sys
 import pytest
 
 HERE = Path(__file__).resolve().parent
-WORKSPACE = HERE.parents[5]
+WORKSPACE = Path(os.environ.get("MAGGIE_WORKSPACE_ROOT", HERE.parents[5])).resolve()
 
 
 @pytest.fixture(scope="module")

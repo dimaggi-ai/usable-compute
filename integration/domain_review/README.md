@@ -23,3 +23,7 @@ is used. `provenance.json` binds pinned input hashes and working source bytes;
 HEAD alone is insufficient before local commits. Preserve the two output ledgers
 and all source classes. The reference uses a private package namespace so the
 working cooling package cannot contaminate the pinned baseline import.
+
+For tests from another checkout layout, set `MAGGIE_WORKSPACE_ROOT` to the
+workspace containing the documented audit and owning repositories. This selects
+the fixture workspace explicitly; it does not download or replace its pinned sources.

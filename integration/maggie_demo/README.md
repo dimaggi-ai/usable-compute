@@ -26,4 +26,10 @@ The story is refusal → binding constraints → negative resource/calibration c
 runnable local demonstration and storyboard; it is not a recorded video or an
 executor proof. All acceptance examples are exposed, never a protected holdout.
 
-Canonical run: [completion package](../../../../../../strategy/team/2026-09-19-maggie-completion/README.md).
+Historical run evidence is retained in the internal strategy workspace. For the
+portable application and its reproducible installation, see the
+[offline receiver guide](../receiver/README.md).
+
+For tests from another checkout layout, set `MAGGIE_WORKSPACE_ROOT` to the
+workspace containing the documented audit and owning repositories. The fixture
+data remains external to this repository and must exist at the declared revisions.
