@@ -19,6 +19,7 @@ import sys
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
+from urllib.parse import quote
 from typing import Any
 
 
@@ -115,7 +116,7 @@ class ObservationStore:
     Closing/reopening the same SQLite file preserves evidence and idempotency.
     """
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, create: bool = True):
         self._lock_fd = None
         self.db = None
         name = str(path)
@@ -131,7 +132,7 @@ class ObservationStore:
                     raise ObservationError("file journals require supported Darwin OFD locking") from exc
                 if sys.platform != "darwin" or not hasattr(fcntl, "F_OFD_SETLK"):
                     raise ObservationError("file journals currently support Darwin OFD locking only")
-                self._lock_fd = os.open(name, os.O_RDWR | os.O_CREAT, 0o600)
+                self._lock_fd = os.open(name, os.O_RDWR | (os.O_CREAT if create else 0), 0o600)
                 if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
                     raise ObservationError("file journal must be a regular file")
                 try:
@@ -143,12 +144,28 @@ class ObservationStore:
                                 struct.pack("@qqihh", 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET))
                 except BlockingIOError as exc:
                     raise ObservationError("journal already has an active application writer") from exc
-            self.db = sqlite3.connect(name)
+            if not create:
+                if name == ":memory:":
+                    raise ObservationError("an existing file journal is required")
+                self.db = sqlite3.connect("file:" + quote(str(Path(name).absolute()), safe="/") + "?mode=rw", uri=True)
+            else:
+                self.db = sqlite3.connect(name)
             if self._lock_fd is not None:
                 locked, opened = os.fstat(self._lock_fd), os.stat(name)
                 if (locked.st_dev, locked.st_ino) != (opened.st_dev, opened.st_ino):
                     raise ObservationError("journal path changed while acquiring writer ownership")
-            self._initialize()
+            if create:
+                self._initialize()
+            else:
+                # Existing-only callers must never initialize arbitrary evidence
+                # files. Validate the supported schema without DDL or migration.
+                actual = list(self.db.execute("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"))
+                with ObservationStore(":memory:") as expected:
+                    wanted = [tuple(row) for row in expected.db.execute("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name")]
+                if actual != wanted:
+                    raise ObservationError("existing file is not a configured supported observation journal")
+                self.db.row_factory = sqlite3.Row
+                self.db.execute("PRAGMA foreign_keys = ON")
         except BaseException:
             self.close()
             raise

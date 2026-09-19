@@ -4,12 +4,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import sqlite3
 
 from .adapters import evaluate, exercise
 from .bindings import policy_input
 from .jsonio import dumps, loads
 from .report import build_report
 from .sources import verify_bundle
+from .observation_cli import COMMANDS, add_commands, run as run_observation
 
 
 def main(argv=None):
@@ -25,9 +27,12 @@ def main(argv=None):
     sub = commands.add_parser("policy-input")
     sub.add_argument("--report", required=True, type=Path)
     sub.add_argument("--request-id", required=True)
+    add_commands(commands)
     args = parser.parse_args(argv)
     try:
-        if args.command == "model":
+        if args.command in COMMANDS:
+            result = run_observation(args)
+        elif args.command == "model":
             result = build_report(args.sources, args.case)
         elif args.command == "exercise":
             result = exercise(args.sources)
@@ -38,7 +43,7 @@ def main(argv=None):
         else:
             result = policy_input(args.report.read_bytes(), args.request_id)
         print(dumps(result), end="")
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as exc:
         print(dumps({"schema_version": "dimaggi-receiver-error/v1", "error": type(exc).__name__,
                      "message": str(exc), "execution_authorized": False, "mutation_request": None}), end="")
         return 2

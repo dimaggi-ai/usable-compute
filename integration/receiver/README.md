@@ -138,7 +138,8 @@ Strict JSON refuses duplicate keys, non-finite numbers (including exponent
 overflow), unpaired Unicode surrogates in keys or values, inputs over 4 MiB and
 nesting over 64 levels. Valid non-BMP characters and literal U+FFFD retain distinct
 identities through the Python/Go boundary. Unknown/error is never
-coerced into zero. Malformed CLI input returns exit code 2 with a JSON error.
+coerced into zero. Malformed JSON or domain input returns exit code 2 with a JSON
+error; command-line syntax errors use argparse's usage message.
 
 ## Report/stub binding and observations
 
@@ -164,6 +165,18 @@ model results; obtaining fresh model evidence requires rerunning the receiver.
 projection for report/request/permission/attempt/workload IDs and divergence.
 It records attributed observations; it cannot submit, approve, retry or cancel.
 
+Version 0.1.2 adds [the synthetic journal importer](JOURNAL-IMPORT.md). It consumes
+the complete bounded TENWA export for a preconfigured synthetic intent, preserves
+attempt history and source times, and imports permission as unresolved. It does
+not create workload observations, authenticate a journal or grant execution.
+
+The same release adds [installed observation commands](OBSERVATION-CLI.md) for
+explicit initialization, import, projection, reconciliation and review notes.
+The [offline Kubernetes adapter](KUBERNETES-IMPORT.md) retains attributed Job and
+Pod fixtures, including uncertain and conflicting lifecycle evidence. It has no
+API client and accepts synthetic evidence only. Neither an imported terminal
+state nor a persisted review note proves that a workload actually ran.
+
 ## Verify
 
 Install the receiver into the test interpreter so the isolated child can resolve
@@ -172,12 +185,15 @@ the same package, then use an exported bundle:
 ```sh
 DIMAGGI_TEST_SOURCES=/tmp/receiver-sources \
   DIMAGGI_BATCH_PREVIEW=/tmp/dimaggi-batch-preview \
+  DIMAGGI_BATCH_JOURNAL=/tmp/dimaggi-batch-journal-demo \
   /tmp/receiver-env/bin/python -m pytest integration/receiver/tests -q
 ```
 
 Build `/tmp/dimaggi-batch-preview` from the supported TENWA source as described
 in its `docs/batch-preview.md`. Cross-language tests explicitly skip without
 `DIMAGGI_BATCH_PREVIEW`; a run with those skips is not report/stub acceptance.
+Build `batch-journal-demo` from the same TENWA checkout. The journal round-trip
+tests require `DIMAGGI_BATCH_JOURNAL`; skips do not establish journal integration.
 Install pytest separately (the recorded environment lock includes it); it is not
 a runtime dependency. Tests requiring the bundle explicitly skip without
 `DIMAGGI_TEST_SOURCES`; those skips do not establish model acceptance. Tests cover
