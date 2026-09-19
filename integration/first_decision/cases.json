@@ -1,0 +1,380 @@
+{
+  "schema_version": "maggie-known-answers/v0.1",
+  "purpose": "Product contract/reference tests, not RSI candidate evaluation. Frozen expected answers; now exposed regression evidence after acceptance.",
+  "splits": {
+    "development": "Existing matrix and seeds 0..11 plus known defect; no independence claim.",
+    "tuning": "Empty: no parameter fitting or selection performed.",
+    "held_out_acceptance": "Distinct contract failure families frozen before first test; no new random seeds, physical generalization or secrecy claim. After this run these are exposed regression tests; future improvement evaluation needs fresh withheld cases."
+  },
+  "semantic_cases": [
+    {
+      "id": "valid_model",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Healthy model checks pass; operational evidence is still absent.",
+      "checks": {
+        "cooling": "pass",
+        "geometry": "pass",
+        "rough_gpu_memory": "pass"
+      },
+      "required": [
+        "cooling",
+        "geometry",
+        "rough_gpu_memory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "feasible_within_profile",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "refused_geometry",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Count-only capacity cannot replace a rectangle.",
+      "checks": {
+        "cooling": "pass",
+        "geometry": "fail"
+      },
+      "required": [
+        "cooling",
+        "geometry"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "refused",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "invalid_input",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Non-finite/type-invalid input is not physical infeasibility.",
+      "checks": {
+        "cooling": "invalid"
+      },
+      "required": [
+        "cooling"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "refused",
+        "comparison": "not_requested",
+        "recommendation": "escalate",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "missing_host_memory",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Unknown demand or capacity is not zero.",
+      "checks": {
+        "host_memory": "missing"
+      },
+      "required": [
+        "host_memory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "incomplete",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "stale_inventory",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Expired live evidence is not a current pass.",
+      "checks": {
+        "inventory": "stale"
+      },
+      "required": [
+        "inventory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "incomplete",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "incomplete_span",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Conditional SPAN verdict with not_checked cannot satisfy a required check.",
+      "checks": {
+        "span_plant": "not_run"
+      },
+      "required": [
+        "span_plant"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "incomplete",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "incomparable_baseline",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Different denominator or workload prevents reporting a gain.",
+      "checks": {
+        "geometry": "pass"
+      },
+      "required": [
+        "geometry"
+      ],
+      "comparable": false,
+      "delta_gpu_h": 100,
+      "expected": {
+        "engineering_readiness": "feasible_within_profile",
+        "comparison": "incomparable",
+        "recommendation": "escalate",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "no_change",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Identical valid healthy-model alternatives have zero delta; retain current state and emit no mutation.",
+      "checks": {
+        "cooling": "pass",
+        "geometry": "pass",
+        "rough_gpu_memory": "pass"
+      },
+      "required": [
+        "cooling",
+        "geometry",
+        "rough_gpu_memory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": 0,
+      "expected": {
+        "engineering_readiness": "feasible_within_profile",
+        "comparison": "comparable",
+        "recommendation": "retain_current_state",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "attractive_64_rejected",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "64-chip placement is attractive but exceeds configured GPU memory; PP and workload change prohibit same-workload ranking.",
+      "checks": {
+        "geometry": "pass",
+        "rough_gpu_memory": "fail"
+      },
+      "required": [
+        "geometry",
+        "rough_gpu_memory"
+      ],
+      "comparable": false,
+      "delta_gpu_h": 100,
+      "expected": {
+        "engineering_readiness": "refused",
+        "comparison": "incomparable",
+        "recommendation": "escalate",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "host_infeasible",
+      "split": "held_out_acceptance",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Synthetic 128 GiB per node demand exceeds 64 GiB allocatable per node despite GPU geometry fit.",
+      "checks": {
+        "geometry": "pass",
+        "host_memory": "fail"
+      },
+      "required": [
+        "geometry",
+        "host_memory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "refused",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "unknown_checkpoint_io",
+      "split": "held_out_acceptance",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "A modeled checkpoint duration cannot supply an observed I/O service rate.",
+      "checks": {
+        "checkpoint_io": "missing"
+      },
+      "required": [
+        "checkpoint_io"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "incomplete",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "mandatory_cannot_be_waived",
+      "split": "held_out_acceptance",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "A required capability cannot be waived by relabeling it.",
+      "checks": {
+        "host_memory": "inapplicable"
+      },
+      "required": [
+        "host_memory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "incomplete",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "omitted_required_check",
+      "split": "held_out_acceptance",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Absent check entry remains missing, never green.",
+      "checks": {},
+      "required": [
+        "inventory"
+      ],
+      "comparable": true,
+      "delta_gpu_h": null,
+      "expected": {
+        "engineering_readiness": "incomplete",
+        "comparison": "not_requested",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    },
+    {
+      "id": "refused_no_benefit_wait",
+      "split": "development",
+      "evidence_class": "synthetic_contract_fixture",
+      "seed": null,
+      "phenomenon": "Fragmented baseline and bandwidth-only alternative both fail geometry; comparable zero gain does not convert refusal into feasibility.",
+      "checks": {
+        "cooling": "pass",
+        "geometry": "fail"
+      },
+      "required": [
+        "cooling",
+        "geometry"
+      ],
+      "comparable": true,
+      "delta_gpu_h": 0,
+      "expected": {
+        "engineering_readiness": "refused",
+        "comparison": "comparable",
+        "recommendation": "wait",
+        "mutation_request": null
+      }
+    }
+  ],
+  "numeric_cases": [
+    {
+      "id": "fragmented_baseline",
+      "seed": 0,
+      "input": {},
+      "expected_allocated_gpus": 0,
+      "expected_count_only_gpus": 256,
+      "expected_useful_gpu_h": 0
+    },
+    {
+      "id": "bandwidth_only",
+      "seed": 0,
+      "input": {
+        "network_efficiency": 0.9
+      },
+      "expected_allocated_gpus": 0,
+      "expected_count_only_gpus": 256,
+      "expected_useful_gpu_h": 0
+    },
+    {
+      "id": "healthy",
+      "seed": 0,
+      "input": {
+        "degraded": false
+      },
+      "expected_allocated_gpus": 384,
+      "expected_count_only_gpus": 384,
+      "expected_useful_gpu_h": 210430.58465522234
+    },
+    {
+      "id": "healthy_network",
+      "seed": 0,
+      "input": {
+        "degraded": false,
+        "network_efficiency": 0.9
+      },
+      "expected_allocated_gpus": 384,
+      "expected_count_only_gpus": 384,
+      "expected_useful_gpu_h": 218786.03266876104
+    },
+    {
+      "id": "power_refused",
+      "seed": 0,
+      "input": {
+        "degraded": false,
+        "feed_mw": 0.1
+      },
+      "expected_allocated_gpus": 0,
+      "expected_count_only_gpus": 0,
+      "expected_useful_gpu_h": 0
+    }
+  ],
+  "synthetic_host_constraint": {
+    "id": "host-fit-01",
+    "workload_id": "synthetic-job-0",
+    "node_id": "synthetic-node-0",
+    "required_GiB": 128,
+    "allocatable_GiB": 64,
+    "expected": "fail",
+    "provenance": "Hand-authored inequality fixture, no operator measurement. Applies per node, never aggregate-only."
+  }
+}

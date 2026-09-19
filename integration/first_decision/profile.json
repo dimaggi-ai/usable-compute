@@ -1,0 +1,253 @@
+{
+  "schema_version": "maggie-capability-evidence/v0.1-proposed",
+  "profile_id": "joined-local-torus-batch/v0.1",
+  "status": "domain_reference_for_handoff_not_released_execution_contract",
+  "owner": "Maggie",
+  "evidence_class": "synthetic_model",
+  "execution_authorized": false,
+  "question": "Can bandwidth alone make job-0, a 128-chip gang, placeable in the existing degraded local torus?",
+  "model": {
+    "source": "usable-compute/integration/usable_capacity.py::scenario",
+    "topology": {
+      "shape": [
+        8,
+        8,
+        8
+      ],
+      "wrap": [
+        true,
+        true,
+        true
+      ],
+      "unhealthy_rule": "all coordinates with odd x",
+      "physical_mapping": "hypothetical; not a calibrated H100 fabric"
+    },
+    "workload": {
+      "ids": [
+        "job-0",
+        "job-1",
+        "job-2",
+        "job-3"
+      ],
+      "selected_request_id": "job-0",
+      "gang_size": 128,
+      "model_label": "reference_405b_16k.yaml with joined overrides",
+      "tp": 8,
+      "pp": 16,
+      "cp": 1,
+      "dp": 1,
+      "seq_len": 8192,
+      "accelerator_label": "H100-SXM parameters in pinned model only"
+    },
+    "parameters": {
+      "feed_mw": 0.6,
+      "network_efficiency": 0.65,
+      "reload_h": 0.25,
+      "failure_rate_per_node_h": 0.000158,
+      "seed": 0,
+      "horizon_h": 720,
+      "racks_per_gang": 2,
+      "chips_per_rack": 64,
+      "kw_per_rack": 81.6,
+      "cooling_rung": "direct-to-chip",
+      "min_ride_through_s": 5,
+      "climate": "temperate",
+      "water_mode": "evaporative"
+    },
+    "identity": "Pin every repository, input/config hash, runtime, seed, profile and accounting version. Output hash is not authentication."
+  },
+  "checks": {
+    "model_mandatory": [
+      "strict_input_validity",
+      "cooling_admission",
+      "sequential_geometry",
+      "rough_gpu_memory",
+      "healthy_step",
+      "recovery",
+      "conservation",
+      "source_identity"
+    ],
+    "model_optional": [
+      "multi_seed_sensitivity",
+      "matched_collective_observations"
+    ],
+    "model_inapplicable": {
+      "span": "one local hall",
+      "optical": "no optical action",
+      "cross_site": "no destination site",
+      "tenant_isolation": "synthetic single-tenant geometry only; no real isolation claim"
+    },
+    "execution_additional_mandatory": [
+      "profile_target_binding",
+      "workload_artifact_identity",
+      "scheduler_capability",
+      "inventory_freshness",
+      "host_cpu",
+      "host_memory",
+      "runtime_gpu_memory",
+      "storage_capacity_and_locality",
+      "checkpoint_io_if_checkpointed",
+      "live_plant",
+      "operator_calibration_and_baseline",
+      "policy_permission"
+    ],
+    "rule": "Invalid/fail required checks refuse. Missing/stale/not_run required checks are incomplete. Mandatory inapplicable is incomplete unless a different reviewed profile declares it truly inapplicable. Preserve all gaps alongside failures."
+  },
+  "freshness": {
+    "model": "Immutable pinned inputs do not age into measurements. Verify bytes at each run; any changed code/inputs invalidates previous comparison identity.",
+    "operator_dynamic": {
+      "max_age_s": null,
+      "status": "unknown",
+      "owner": "Maggie with operator",
+      "required_fields": [
+        "source_id",
+        "source_revision",
+        "observed_at_utc",
+        "valid_until_utc",
+        "target_id",
+        "measurement_window_start_utc",
+        "measurement_window_end_utc"
+      ]
+    },
+    "execution": "No action until each mandatory evidence item has an approved finite TTL or validity window. At dispatch, now < valid_until; future/unknown timestamps, scope mismatch and observed drift block. Revalidate after queue delay. No snapshot implies reservation.",
+    "synthetic_freshness_tests": {
+      "as_of_utc": "2026-09-19T12:00:00Z",
+      "ttl_s": 60,
+      "boundary": "age < 60 valid, age >= 60 stale; illustrative contract fixture only"
+    }
+  },
+  "operator": {
+    "scheduler": null,
+    "scope_id": null,
+    "accelerator_family": null,
+    "workload": null,
+    "topology": null,
+    "baseline": null,
+    "access": null,
+    "evidence_status": "missing"
+  },
+  "cpu_executor_proposal": {
+    "proof": "B only; not derived from model proof A",
+    "scheduler": "kind/Kubernetes proposed in delivery plan, prerequisites unverified",
+    "cluster_id": null,
+    "namespace": null,
+    "image_digest": null,
+    "payload_digest": null,
+    "resources": null,
+    "runtime_limit_s": null,
+    "cost_ceiling": 0,
+    "execution_authorized": false,
+    "applicability": "CPU submission/identity/attempt/observation mechanics only. No GPU, thermal, checkpoint or operator-performance claim."
+  },
+  "action_intent": {
+    "action_class": "submit_bounded_batch",
+    "cardinality": 1,
+    "designated_scheduler_scope": null,
+    "workload_artifact_digest": null,
+    "immutable_parameters_digest": null,
+    "target_profile_id": null,
+    "model_request_reference": "job-0 is a model referent only, not a runnable workload",
+    "reservation_guarantee": "not_requested; unsupported guarantees must be refused",
+    "approval": {
+      "status": "not_requested",
+      "expires_at_utc": null,
+      "max_validity_s": null,
+      "semantics": "Single bound intent, no use at or after expiry; effective expiry is minimum of approval expiry and all mandatory evidence expiries. Unknown expiry blocks. Changed binding requires new evaluation/permission."
+    },
+    "mutation_request": null
+  },
+  "resource_requirements": {
+    "host_cpu": {
+      "required": null,
+      "available": null,
+      "unit": "cores",
+      "scope": "per eligible node",
+      "status": "missing",
+      "provenance_required": "workload CPU request/peak and scheduler allocatable inventory",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "host_memory": {
+      "required": null,
+      "available": null,
+      "unit": "GiB",
+      "scope": "per eligible node",
+      "status": "missing",
+      "provenance_required": "runtime peak including loader/pinned/page/cache buffers and allocatable inventory",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "runtime_gpu_memory": {
+      "required": null,
+      "available": null,
+      "unit": "GB",
+      "scope": "per GPU/rank",
+      "status": "missing",
+      "provenance_required": "matched peak memory including weights, optimizer, gradients, activations, comm/workspace/allocator reserve and allocatable memory",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "storage_capacity": {
+      "required": null,
+      "available": null,
+      "unit": "GiB",
+      "scope": "per local/shared storage domain",
+      "status": "missing",
+      "provenance_required": "dataset/staging/scratch/checkpoints/retention/quotas and free usable capacity",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "checkpoint_bytes": {
+      "required": null,
+      "available": null,
+      "unit": "bytes",
+      "scope": "per checkpoint and job",
+      "status": "missing",
+      "provenance_required": "actual checkpoint artifact and sharding/retention manifest",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "checkpoint_write_rate": {
+      "required": null,
+      "available": null,
+      "unit": "bytes/s",
+      "scope": "shared service and per job",
+      "status": "missing",
+      "provenance_required": "sustained/burst service evidence and concurrent load",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "checkpoint_restore_rate": {
+      "required": null,
+      "available": null,
+      "unit": "bytes/s",
+      "scope": "restore path and job",
+      "status": "missing",
+      "provenance_required": "verified restore and accessible artifact",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    },
+    "checkpoint_write_budget": {
+      "required": null,
+      "available": null,
+      "unit": "s",
+      "scope": "per checkpoint blocking window",
+      "status": "missing",
+      "provenance_required": "workload recovery objective and actual serialization/flush/durable timing",
+      "unknown_rule": "No optimistic default; execution incomplete. For non-checkpointed CPU payload, checkpoint fields may be inapplicable only in its separate reviewed profile."
+    }
+  },
+  "output_meanings": {
+    "not_admitted_gpu_h": "All unallocated nominal chips for full 720 h, including initially unhealthy, stranded and power-denied; not all healthy idle capacity.",
+    "recovery_and_discard_gpu_h": "Allocated nominal minus retained recovery time; owns checkpoint/restart/discard once.",
+    "retained_communication_and_bubble_gpu_h": "Retained runtime minus compute; includes communication, pipeline bubbles and synchronization wait.",
+    "useful_compute_gpu_h": "Modeled retained compute service including recomputation, not completed training or tokens.",
+    "rough_memory_pass": "Estimate below configured GB; does not establish runtime fit.",
+    "comparison": "Fixed denominator, window, workload, source/model version, seeds and accounting; only declared intervention fields differ."
+  },
+  "prohibited_inferences": [
+    "model_feasible implies executable",
+    "CPU_executor_proof implies GPU_performance",
+    "torus implies operator_topology",
+    "hash implies authenticated_truth",
+    "nominal_GPU_h implies useful_work",
+    "same_seed jobs are independent",
+    "modeled waste_dollars implies ROI",
+    "unknown resource requirements are zero",
+    "smaller gang implies equivalent training work",
+    "approval or submit_ack implies workload_success"
+  ]
+}
