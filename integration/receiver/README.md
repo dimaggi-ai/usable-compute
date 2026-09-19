@@ -19,6 +19,10 @@ The package declares Python 3.11 or later. The reproducible recipe below is
 verified for Python 3.12 on macOS arm64;
 `requirements-darwin-arm64-py312.lock` binds the wheels used for that environment.
 Other interpreter/platform combinations require their own wheel lock and tests.
+Version 0.1.1 enforces one active file-journal writer with Darwin OFD locks;
+file-backed observations now refuse unsupported platforms before creating a
+journal. In-memory observations and the model/report path do not require that
+lock. This narrows file-journal compatibility; see [the tested locking limits](OBSERVATIONS.md).
 
 ```sh
 python3 -m venv /tmp/receiver-env
@@ -131,7 +135,9 @@ supplied labels, not authenticated observations. Owner exceptions become an
 not-run states remain distinct in the raw result.
 
 Strict JSON refuses duplicate keys, non-finite numbers (including exponent
-overflow), inputs over 4 MiB and nesting over 64 levels. Unknown/error is never
+overflow), unpaired Unicode surrogates in keys or values, inputs over 4 MiB and
+nesting over 64 levels. Valid non-BMP characters and literal U+FFFD retain distinct
+identities through the Python/Go boundary. Unknown/error is never
 coerced into zero. Malformed CLI input returns exit code 2 with a JSON error.
 
 ## Report/stub binding and observations

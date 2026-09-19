@@ -48,12 +48,40 @@ remain visible; a later attempt cannot erase an earlier failed/unknown one.
 
 ## Storage and calls
 
-Only the standard library is needed. Use one application writer per journal;
-multi-writer synchronization, tamper resistance, signatures, retention and schema
-migration are outside this initial implementation. SQLite transactions protect
-individual appends; triggers reject UPDATE/DELETE of journal tables through this
-database connection. Those triggers are a programming guard, not a security
-boundary against someone who can modify the database file.
+Only the standard library is needed. One active `ObservationStore` owns a file
+journal, including reads through that store. A second store is refused before
+it opens SQLite, including a separate process using a symlink or hard link to
+the same inode. This enforces the bounded one-writer precondition; it does not
+provide a multi-writer reconciliation algorithm. Close the store before handing
+it to a new process. `:memory:` instances remain independent, nonpersistent stores.
+
+**File-backed platform support is deliberately narrowed:** this increment was
+tested on macOS ARM64, CPython 3.12.6, using Darwin's `F_OFD_SETLK`. Other platforms
+fail closed for file journals until their locking implementation is verified;
+portable report generation is unaffected. The old implementation used portable
+SQLite calls but did not enforce its single-writer requirement. Use a regular
+file on a local filesystem; network filesystems, alternate VFS implementations,
+forking with an open store, and renaming/replacing its file while open are not
+supported or verified. The API does not certify filesystem locality.
+
+The advisory open-file-description lock covers byte 0 of the actual database
+inode and ends when its descriptor closes or the process exits. Its Darwin
+`struct flock` layout comes from the available SDK's `sys/fcntl.h`
+(`off_t`, `off_t`, `pid_t`, `short`, `short`), rather than a guessed Linux ABI.
+SQLite reserves a separate [lock-byte region beginning at 1 GiB](https://www.sqlite.org/fileformat2.html#the_lock_byte_page).
+Tests cover crash release, failed initialization, aliases, and closing other
+file/SQLite descriptors without releasing ownership. Use a canonical database
+path for recovery and its SQLite journal files; alias contention tests do not
+establish safe recovery through a different hard-link name.
+
+An initial whole-file `flock` implementation failed on this platform because it
+interfered with SQLite initialization (`database is locked`). It was replaced by
+the tested OFD byte-range lock. Process-owned POSIX record locks were rejected
+because closing another descriptor can release them. Advisory locks and triggers
+are programming guards, not security boundaries against raw SQL or a process
+that can modify the database file. Tamper resistance, signatures, retention and
+general schema migrations remain outside scope. SQLite transactions protect
+individual appends; triggers reject UPDATE/DELETE of every journal table.
 Cross-request object checks scan this bounded local journal; large-scale ingestion
 and indexing are not claimed or benchmarked.
 
@@ -73,6 +101,12 @@ and indexing are not claimed or benchmarked.
    disposition=..., reason=..., recorded_at_utc=...)` appends application triage.
    Allowed dispositions are `hold`, `escalate`, and `proposal`; a proposal is
    only a reviewer note. `triage_history(case_id)` retains every note and author.
+6. `record_resolution(resolution_id=..., opening_reconciliation_id=...,
+   resolving_reconciliation_id=..., case_id=..., actor_id=..., reason=...,
+   recorded_at_utc=...)` records only `resolved_in_read_projection`.
+   `resolution_history(case_id)` reads those immutable application notes. Exact
+   repeats are no-ops after restart; changing any argument under an existing
+   resolution ID refuses. Actor identity is attribution, not authentication.
 
 No default freshness is supplied. `freshness_seconds` must explicitly contain
 positive finite seconds for all three roles. UTC timestamps require `Z` and at
@@ -97,9 +131,42 @@ at or after expiry; the exact freshness comparison still uses the declared TTL.
 Missing evidence has unknown (`null`) first-supported time and age because no
 observed start time exists; repeated projections do not invent an age of zero.
 Triage does not change the computed evidence disposition, erase an unknown
-attempt, resolve effect uncertainty or produce a mutation request. No case-close
-workflow is claimed; resolving a source reset or conflict needs a reviewed
-follow-up contract rather than timestamp refresh or a reviewer check box.
+attempt, resolve effect uncertainty or produce a mutation request.
+
+## Bounded application resolution
+
+Resolution notes have a deliberately narrow meaning: a named application evidence
+condition is absent from a later persisted read projection. They do not rewrite
+or suppress computed cases. Both snapshots must bind the identical intent and
+exact freshness policy, the resolving snapshot must be later, and the note
+cannot precede it. The relevant source projection must be current. The module
+also recomputes the projection at note time, refusing an old clear snapshot if
+the condition has recurred, evidence has expired, or a conflict has since arrived.
+
+The allowlist is `permission_missing`, `attempt_missing`, `workload_missing`,
+the corresponding three `_stale` conditions, `workload_unknown`,
+`desired_outcome_not_met`, and `desired_observed_divergence`. A replacement event
+can change a case ID while leaving the same semantic condition active; therefore
+the check uses the reason and its source scope in the same immutable intent,
+not merely disappearance of the old case ID. Every current stream of that source
+must satisfy freshness. Neither source resets/conflicts nor object-identity or
+foreign-writer issues may be present in the resolving or note-time projection.
+
+Clearing one evidence condition does not mean the request is healthy: other
+conditions remain computed independently. In particular, a newly observed
+permission record can clear `permission_missing` while `attempt_unknown` still
+requires escalation. Every resolution records `mutation_request: null`,
+`grants_permission: false`, and `resolves_attempt_effects: false`. Raw events,
+unknown attempts, triage and previous snapshots remain unchanged. Later
+recurrence or conflict is an active case even if an earlier resolution note
+exists. A historical resolution is neither a permanent suppression nor a claim
+that the scheduler's source state is authoritative or correct.
+
+Selecting a source epoch, closing source conflicts, resolving unknown attempt
+effects, and changing permission remain unsupported. Those operations need
+their source/authority contracts; an application reviewer cannot manufacture
+them. The additional `resolutions` table is append-only and leaves prior records
+and serialized snapshots unchanged.
 
 ## Required interpretations and tested limits
 
@@ -114,6 +181,8 @@ follow-up contract rather than timestamp refresh or a reviewer check box.
 | Missing, stale or unknown | Separate labels; neither becomes zero, success or no effect |
 | Foreign-writer assertion | Retain source assertion and escalate; attribution is not authentication |
 | Source version conflict or source reset | Sticky explicit conflict/reset, with all accepted earlier evidence retained |
+| Old stale case ID vanishes but replacement evidence is still stale | Resolution refused; the semantic condition remains active |
+| A prior application resolution followed by stale evidence or conflict | Current case remains active; prior resolution stays historical |
 | Current successful observation | `retain`; still no authorization, mutation request or executor-proof claim |
 
 Delivery-Decisions' real eight-case executor acceptance set is **not** completed
@@ -127,7 +196,7 @@ Run the synthetic tests from the research repository with an installed receiver,
 or with its source directory on `PYTHONPATH`:
 
 ```sh
-PYTHONPATH=integration/receiver/src python -m pytest -q integration/receiver/tests/test_observations.py
+PYTHONPATH=integration/receiver/src python -m pytest -q integration/receiver/tests/test_observations.py integration/receiver/tests/test_observation_resolution.py
 ```
 
 These product observations/cases are not RSI work. No candidate execution or

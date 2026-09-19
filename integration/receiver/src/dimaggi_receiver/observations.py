@@ -10,8 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import sqlite3
+import stat
+import struct
+import sys
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
@@ -35,6 +39,19 @@ EVENT_KEYS = {
     "state", "evidence_class", "payload",
 }
 IDENTITIES = ("request_id", "report_id", "profile_id", "target_id", "workload_id")
+# These labels concern the application's evidence condition, never source truth
+# or whether an uncertain attempt had effects. Keep this an explicit allowlist.
+RESOLVABLE_CONDITIONS = {
+    **{f"{kind}_{state}": kind for kind in KINDS for state in ("missing", "stale")},
+    "workload_unknown": "workload",
+    "desired_outcome_not_met": "workload",
+    "desired_observed_divergence": "workload",
+}
+RESOLUTION_BLOCKERS = {
+    "source_conflict", "object_identity_reuse_or_conflict",
+    "object_not_attributed_to_submission", "foreign_change",
+    *(f"{kind}_source_reset" for kind in KINDS),
+}
 
 
 class ObservationError(ValueError):
@@ -99,7 +116,44 @@ class ObservationStore:
     """
 
     def __init__(self, path: str | Path):
-        self.db = sqlite3.connect(str(path))
+        self._lock_fd = None
+        self.db = None
+        name = str(path)
+        if not name:
+            raise ObservationError("a persistent file path or :memory: is required")
+        try:
+            if name != ":memory:":
+                # Lock the database inode itself: aliases/hard links cannot create
+                # two cooperating writers by choosing a different sidecar name.
+                try:
+                    import fcntl
+                except ImportError as exc:
+                    raise ObservationError("file journals require supported Darwin OFD locking") from exc
+                if sys.platform != "darwin" or not hasattr(fcntl, "F_OFD_SETLK"):
+                    raise ObservationError("file journals currently support Darwin OFD locking only")
+                self._lock_fd = os.open(name, os.O_RDWR | os.O_CREAT, 0o600)
+                if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
+                    raise ObservationError("file journal must be a regular file")
+                try:
+                    # Darwin sys/fcntl.h: off_t, off_t, pid_t, short, short.
+                    # OFD ownership survives closure of other descriptors and
+                    # rejects another descriptor even in this process. Byte 0
+                    # does not overlap SQLite's lock-byte region at 1 GiB.
+                    fcntl.fcntl(self._lock_fd, fcntl.F_OFD_SETLK,
+                                struct.pack("@qqihh", 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET))
+                except BlockingIOError as exc:
+                    raise ObservationError("journal already has an active application writer") from exc
+            self.db = sqlite3.connect(name)
+            if self._lock_fd is not None:
+                locked, opened = os.fstat(self._lock_fd), os.stat(name)
+                if (locked.st_dev, locked.st_ino) != (opened.st_dev, opened.st_ino):
+                    raise ObservationError("journal path changed while acquiring writer ownership")
+            self._initialize()
+        except BaseException:
+            self.close()
+            raise
+
+    def _initialize(self) -> None:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript("""
@@ -125,8 +179,11 @@ class ObservationStore:
             CREATE TABLE IF NOT EXISTS triage (
                 triage_id TEXT PRIMARY KEY, case_id TEXT NOT NULL,
                 recorded_at TEXT NOT NULL, body TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS resolutions (
+                resolution_id TEXT PRIMARY KEY, case_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL, body TEXT NOT NULL);
         """)
-        for table in ("intents", "sources", "events", "conflicts", "reconciliations", "triage"):
+        for table in ("intents", "sources", "events", "conflicts", "reconciliations", "triage", "resolutions"):
             for operation in ("UPDATE", "DELETE"):
                 self.db.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_no_{operation.lower()}
                     BEFORE {operation} ON {table}
@@ -134,7 +191,14 @@ class ObservationStore:
         self.db.commit()
 
     def close(self) -> None:
-        self.db.close()
+        try:
+            if self.db is not None:
+                self.db.close()
+                self.db = None
+        finally:
+            if self._lock_fd is not None:
+                os.close(self._lock_fd)
+                self._lock_fd = None
 
     def __enter__(self) -> "ObservationStore":
         return self
@@ -446,3 +510,76 @@ class ObservationStore:
         _identifier(case_id, "case_id")
         notes = [json.loads(row["body"]) for row in self.db.execute("SELECT body FROM triage WHERE case_id=?", (case_id,))]
         return sorted(notes, key=lambda item: (_utc(item["recorded_at_utc"]), item["triage_id"]))
+
+    def record_resolution(self, *, resolution_id: str,
+                          opening_reconciliation_id: str,
+                          resolving_reconciliation_id: str, case_id: str,
+                          actor_id: str, reason: str, recorded_at_utc: str) -> bool:
+        """Record that an allowlisted condition cleared in a later read model.
+
+        This never suppresses computed cases, selects an epoch, closes an unknown
+        attempt or changes source truth. A later recurrence remains active. Both
+        snapshots and the exact freshness policy are immutable evidence bindings.
+        """
+        arguments = {
+            "resolution_id": resolution_id,
+            "opening_reconciliation_id": opening_reconciliation_id,
+            "resolving_reconciliation_id": resolving_reconciliation_id,
+            "case_id": case_id, "actor_id": actor_id, "reason": reason,
+            "recorded_at_utc": recorded_at_utc,
+        }
+        for field, value in arguments.items():
+            _identifier(value, field)
+        recorded = _utc(recorded_at_utc)
+        existing = self.db.execute("SELECT body FROM resolutions WHERE resolution_id=?", (resolution_id,)).fetchone()
+        if existing:
+            prior = json.loads(existing["body"])
+            if any(prior[key] != value for key, value in arguments.items()):
+                raise SourceConflict("resolution identity reused with different content")
+            return False
+        opening = self.reconciliation(opening_reconciliation_id)
+        resolving = self.reconciliation(resolving_reconciliation_id)
+        if opening["intent"] != resolving["intent"]:
+            raise ObservationError("resolution snapshots must bind the same immutable intent")
+        if _json(opening["freshness_seconds"]) != _json(resolving["freshness_seconds"]):
+            raise ObservationError("resolution cannot change the freshness policy")
+        if not _utc(opening["as_of_utc"]) < _utc(resolving["as_of_utc"]) <= recorded:
+            raise ObservationError("resolution requires a later snapshot collected before the note")
+        case = next((item for item in opening["cases"] if item["case_id"] == case_id), None)
+        if case is None:
+            raise ObservationError("case is not present in the opening reconciliation")
+        condition = case["reason"]
+        kind = RESOLVABLE_CONDITIONS.get(condition)
+        if kind is None:
+            raise ObservationError("this condition requires its source or authority resolution contract")
+        # A snapshot learned before a later contradictory event must not become
+        # a current closure merely because its immutable old bytes still exist.
+        current = self.project(opening["intent"]["request_id"],
+                               as_of_utc=recorded_at_utc,
+                               freshness_seconds=opening["freshness_seconds"])
+        for report in (resolving, current):
+            reasons = {item["reason"] for item in report["cases"]}
+            if condition in reasons:
+                raise ObservationError("the semantic condition is still active")
+            if reasons & RESOLUTION_BLOCKERS:
+                raise ObservationError("unresolved source or object identity issue prevents resolution")
+            if report["projections"][kind]["status"] != "current":
+                raise ObservationError("resolution requires current relevant source evidence")
+        note = {
+            **arguments, "request_id": opening["intent"]["request_id"],
+            "condition": condition, "source_id": opening["intent"]["sources"][kind],
+            "disposition": "resolved_in_read_projection",
+            "mutation_request": None, "grants_permission": False,
+            "resolves_attempt_effects": False,
+        }
+        with self.db:
+            self.db.execute("INSERT INTO resolutions VALUES (?, ?, ?, ?)",
+                            (resolution_id, case_id, recorded_at_utc, _json(note)))
+        return True
+
+    def resolution_history(self, case_id: str) -> list[dict[str, Any]]:
+        """Historical application notes; current cases always remain computed."""
+        _identifier(case_id, "case_id")
+        notes = [json.loads(row["body"]) for row in self.db.execute(
+            "SELECT body FROM resolutions WHERE case_id=?", (case_id,))]
+        return sorted(notes, key=lambda item: (_utc(item["recorded_at_utc"]), item["resolution_id"]))

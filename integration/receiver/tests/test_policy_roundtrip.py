@@ -95,3 +95,13 @@ def test_changed_reviewed_binding_is_visible(reports, tmp_path):
     result = preview(tmp_path, raw, request)
     assert "reviewed_binding_changed" in result["boundary_reasons"]
     assert result["dispatch_possible"] is False
+
+
+def test_valid_unicode_request_identities_remain_distinct(reports, tmp_path):
+    raw = dumps(reports["restore_geometry"]).encode()
+    results = [preview(tmp_path, raw, policy_input(raw, request_id))
+               for request_id in ("request-🚀", "request-�")]
+    assert results[0]["binding_digest"] != results[1]["binding_digest"]
+    for result in results:
+        assert result["core_policy"]["decision"] == "denied"
+        assert result["dispatch_possible"] is False
