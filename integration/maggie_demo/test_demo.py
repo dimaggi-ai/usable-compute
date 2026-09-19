@@ -9,7 +9,8 @@ import sys
 import pytest
 
 HERE = Path(__file__).resolve().parent
-WORKSPACE = Path(os.environ.get("MAGGIE_WORKSPACE_ROOT", HERE.parents[5])).resolve()
+WORKSPACE = (Path(os.environ["MAGGIE_WORKSPACE_ROOT"]).resolve()
+             if "MAGGIE_WORKSPACE_ROOT" in os.environ else HERE.parents[5])
 
 
 @pytest.fixture(scope="module")

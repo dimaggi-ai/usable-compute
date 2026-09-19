@@ -8,7 +8,18 @@ import sys
 import pytest
 
 HERE = Path(__file__).resolve().parent
-WORKSPACE = Path(os.environ.get("MAGGIE_WORKSPACE_ROOT", HERE.parents[5])).resolve()
+WORKSPACE = (Path(os.environ["MAGGIE_WORKSPACE_ROOT"]).resolve()
+             if "MAGGIE_WORKSPACE_ROOT" in os.environ else HERE.parents[5])
+
+
+@pytest.mark.parametrize("relative", ["domain_review/test_review.py", "maggie_demo/test_demo.py"])
+def test_explicit_workspace_supports_shallow_checkout(relative, monkeypatch, tmp_path):
+    monkeypatch.setenv("MAGGIE_WORKSPACE_ROOT", str(tmp_path))
+    source = HERE.parent / relative
+    namespace = {"__file__": "/tmp/research/integration/" + relative,
+                 "__name__": "isolated_workspace_probe"}
+    exec(compile(source.read_text(), str(source), "exec"), namespace)
+    assert namespace["WORKSPACE"] == tmp_path.resolve()
 
 
 @pytest.fixture(scope="module")
