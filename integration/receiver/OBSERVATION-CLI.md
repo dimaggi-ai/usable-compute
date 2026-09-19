@@ -35,6 +35,15 @@ unrelated or unsupported SQLite files are refused without initialization or
 migration. The existing Darwin OFD locking limitation applies to these commands.
 Keep a canonical path and close each store before opening the next one.
 
+Existing-only commands also refuse SQLite `-journal`, `-wal` or `-shm` sidecars
+before opening SQLite. A crashed writer can leave a hot rollback journal that
+SQLite would otherwise recover before schema validation, modifying a file the
+command subsequently refuses. Preserve the database and all sidecars for an
+explicit recovery review of the owned file; the CLI performs no automatic repair.
+This conservative rule also refuses leftover sidecars that might be harmless.
+It assumes the documented cooperative single-writer/canonical-path discipline,
+not protection from an unrelated process changing files concurrently.
+
 ## Import and inspect
 
 With the explicit request and expected journal IDs from that declaration:

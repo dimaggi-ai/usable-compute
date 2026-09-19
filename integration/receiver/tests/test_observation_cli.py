@@ -1,6 +1,8 @@
 """Local command workflow and preservation of unconfigured evidence files."""
 import json
 import sqlite3
+import subprocess
+import sys
 
 import pytest
 
@@ -95,3 +97,48 @@ def test_unknown_request_and_invalid_freshness_preserve_configured_file(tmp_path
         invoke(capsys, "observations-show", "--journal", journal, "--request-id", request,
                "--as-of", T0, "--freshness", ttl, code=2)
         assert journal.read_bytes() == before
+
+
+@pytest.mark.parametrize("suffix", ["-journal", "-wal", "-shm"])
+def test_existing_only_access_preserves_recovery_sidecars(tmp_path, capsys, suffix):
+    config, ttl = files(tmp_path); journal = tmp_path / "configured.sqlite"
+    invoke(capsys, "observations-init", "--journal", journal, "--intent", config)
+    sidecar = tmp_path / (journal.name + suffix)
+    sidecar.write_bytes(b"retained recovery evidence")
+    before = {path.name: path.read_bytes() for path in (journal, sidecar)}
+    error = invoke(capsys, "observations-show", "--journal", journal, "--request-id", "request",
+                   "--as-of", T0, "--freshness", ttl, code=2)
+    assert "recovery sidecars" in error["message"]
+    assert before == {path.name: path.read_bytes() for path in (journal, sidecar)}
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_crashed_sqlite_writer_is_not_recovered_by_read_cli(tmp_path, capsys, configured):
+    config, ttl = files(tmp_path); journal = tmp_path / "evidence.sqlite"
+    if configured:
+        invoke(capsys, "observations-init", "--journal", journal, "--intent", config)
+    else:
+        with sqlite3.connect(journal) as db:
+            db.execute("CREATE TABLE user_evidence(id INTEGER PRIMARY KEY, payload TEXT)")
+            db.executemany("INSERT INTO user_evidence VALUES (?,?)", [(i, "a" * 4000) for i in range(300)])
+    # A real child exits after pages spill from an uncommitted transaction.
+    # Opening this hot rollback set in ordinary RW SQLite performs recovery.
+    child = subprocess.run([sys.executable, "-c", """
+import os, sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute('PRAGMA cache_size=5')
+db.execute('BEGIN IMMEDIATE')
+if sys.argv[2] == 'True':
+    for i in range(300):
+        db.execute('INSERT INTO sources VALUES (?,?,?)', (str(i) + 'x' * 4000, 'permission', 'synthetic-target'))
+else:
+    db.execute('UPDATE user_evidence SET payload=?', ('b' * 4000,))
+os._exit(77)
+""", str(journal), str(configured)], capture_output=True, timeout=15)
+    assert child.returncode == 77, child.stderr
+    sidecar = tmp_path / (journal.name + "-journal")
+    assert sidecar.exists() and sidecar.read_bytes()[:8] != b"\0" * 8
+    before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode) for p in (journal, sidecar)}
+    invoke(capsys, "observations-show", "--journal", journal, "--request-id", "request",
+           "--as-of", T0, "--freshness", ttl, code=2)
+    assert before == {p.name: (p.read_bytes(), p.stat().st_mtime_ns, p.stat().st_mode) for p in (journal, sidecar)}

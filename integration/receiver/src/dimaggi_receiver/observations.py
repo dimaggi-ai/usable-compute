@@ -147,6 +147,12 @@ class ObservationStore:
             if not create:
                 if name == ":memory:":
                     raise ObservationError("an existing file journal is required")
+                # SQLite can recover a hot journal before the first schema
+                # query, changing even a file we subsequently refuse. Existing-
+                # only CLI access must preserve the complete recovery set for an
+                # explicit owned-file recovery; never open such files in SQLite.
+                if any(os.path.lexists(name + suffix) for suffix in ("-journal", "-wal", "-shm")):
+                    raise ObservationError("existing-only access refuses SQLite recovery sidecars; preserve all files for explicit recovery")
                 self.db = sqlite3.connect("file:" + quote(str(Path(name).absolute()), safe="/") + "?mode=rw", uri=True)
             else:
                 self.db = sqlite3.connect(name)
