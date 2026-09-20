@@ -1,7 +1,8 @@
 # Mac collector connection to a Kubernetes lab
 
-This runbook prepares a connection for the existing read-only collector. It has
-not been exercised against a live lab. Provisioning, workload submission and
+This runbook prepares a connection for the existing read-only collector. Its
+remote SSH route has not been exercised against a live lab; the one-shot host
+harness was separately exercised against a local kind v1.35.0 cluster. Provisioning, workload submission and
 cleanup belong to the separately authorized lab procedure. A reachable endpoint
 alone does not establish execution permission or operator acceptance.
 
@@ -58,9 +59,9 @@ an insecure TLS option or substitute the SSH host key for the cluster CA.
 
 Invoke the existing collector library from the trusted host integration using
 this explicit endpoint and its independently supplied configuration; see the
-[actual library call](KUBERNETES-COLLECT.md#journal-continuity-and-use). There is no
-standalone collector CLI asserted by this runbook. Keep the durable journal under
-one owner. Stop the foreground tunnel with Ctrl-C after collection; that closes
+[actual library call](KUBERNETES-COLLECT.md#journal-continuity-and-use). The optional [one-shot host harness](tools/COLLECT-LAB.md) wraps that
+library call with explicit private input files and a persistent journal. Keep the
+durable journal under one owner. Stop the foreground tunnel with Ctrl-C after collection; that closes
 the tunnel and does not clean up cloud resources or workloads.
 
 ## Preserve strict compatibility checks
@@ -80,8 +81,9 @@ contract. [Pinned upstream plugin source](https://github.com/kubernetes/kubernet
 Before extending compatibility, retain the actual admitted Pod and Job, verified
 server version and relevant admission configuration. Compare every added or
 changed field against pinned upstream behavior, add positive fixtures and
-negative mutation cases, and keep unknown fields refused. No such extension or
-live-cluster compatibility proof is supplied here.
+negative mutation cases, and keep unknown fields refused. Receiver 0.1.6 now provides the explicit opt-in stock admission profile
+described in the [collector contract](KUBERNETES-COLLECT.md); it is grounded in one
+local v1.35.0 capture and does not establish compatibility with every deployment.
 
 The collector's post-connect watchdog bounds slow headers and bodies. Platform
 DNS resolution is not cancellably bounded, and this is not a hard process

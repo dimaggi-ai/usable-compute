@@ -234,3 +234,14 @@ Other operating systems remain outside file-journal support.
 Version 0.1.5 adds the opt-in [TLS collection library](KUBERNETES-COLLECT.md). A trusted host supplies the target, public CA, in-memory credential, pinned Job identity and hashed TENWA verifier. This path reads Kubernetes resources and bounded output into the existing observation journal. Existing file-import and model CLI paths retain their original scope; arbitrary input cannot enable network collection. The collector grants no execution permission or automatic retry.
 
 The complete local acceptance suite also runs `test_collection_roundtrip.py` with the actual TENWA object verifier and payload binaries. The public installed-wheel workflow explicitly excludes that file together with the two existing TENWA subprocess suites; it runs the collector's local TLS and independent adversarial tests. The release reproduction script supplies all three binaries and fails if required tests skip.
+
+### Explicit local Kubernetes Pod compatibility (0.1.6)
+
+The read-only collector accepts omitted per-item type metadata only inside a
+validated v1 PodList and records its original byte digest. Actual local v1.35.0
+collection exposed this typed-list representation and a narrow set of Pod-only
+admission defaults. An explicit `pod_profile` opt-in supports exactly the stock
+priority/preemption/toleration values; other mutations remain unverified. The
+original strict default remains available. See the [collector contract](KUBERNETES-COLLECT.md)
+and [Mac invocation harness](tools/COLLECT-LAB.md). This compatibility does not
+grant workload execution permission or replace operator acceptance.

@@ -13,7 +13,7 @@ import subprocess
 
 import pytest
 
-from dimaggi_receiver.kubernetes_collect import Collector
+from dimaggi_receiver.kubernetes_collect import Collector, POD_PROFILE
 from dimaggi_receiver.observations import ObservationError
 from test_kubernetes_collect import lab, tls_material, NOW
 
@@ -100,3 +100,31 @@ def test_scoped_job_not_found_remains_absence_not_no_effect(actual):
     event = actual[3].history(actual[4]["request_id"])[0]["event"]
     assert event["payload"]["source_bundle"]["absence"]["http_status"] == 404
     assert event["payload"]["pod_attempts"]  # owned Pods may outlive the Job
+
+
+def test_real_verifier_list_normalization_stock_defaults_and_profile_epoch(actual):
+    config, resources, calls, store, kwargs = actual
+    config = replace(config, pod_profile=POD_PROFILE)
+    resources["pod"]["spec"].update(
+        priority=0, preemptionPolicy="PreemptLowerPriority", tolerations=[
+            {"key": "node.kubernetes.io/not-ready", "operator": "Exists",
+             "effect": "NoExecute", "tolerationSeconds": 300},
+            {"key": "node.kubernetes.io/unreachable", "operator": "Exists",
+             "effect": "NoExecute", "tolerationSeconds": 300},
+        ])
+    # Kubernetes list items omit TypeMeta; named Pod reads retain it. Keep
+    # independent representations so this exercises normalization end to end.
+    listed = copy.deepcopy(resources["pod"])
+    listed.pop("apiVersion")
+    listed.pop("kind")
+    resources["pods"]["items"] = [listed]
+    result = Collector(config, clock=lambda: NOW).collect(store, **kwargs)
+    assert result["state"] == "succeeded" and not result["execution_proven"]
+    assert len(calls) == 8
+    recorded = store.history(kwargs["request_id"])[0]["event"]["payload"]["collection"]
+    assert recorded["pod_spec_verified"] and recorded["output_verified"]
+    assert recorded["pod_comparison_profile"] == POD_PROFILE
+    before = len(calls)
+    with pytest.raises(ObservationError):
+        Collector(replace(config, pod_profile=""), clock=lambda: NOW).collect(store, **kwargs)
+    assert len(calls) == before and len(store.history(kwargs["request_id"])) == 1

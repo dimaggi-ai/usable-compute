@@ -53,7 +53,26 @@ The collector then compares each supported Pod spec with the verified Job's
 stored template. Its narrow comparison permits a syntactically valid assigned
 `nodeName` and omission of the three false host-namespace booleans. Other changes,
 including unsupported admission defaults or injected fields, do not receive a
-spec-match claim.
+spec-match claim. Receiver 0.1.6 adds an explicit opt-in `pod_profile` named
+`kubernetes-pod-admission/v1.35.0-stock/v1`: only integer priority 0,
+`PreemptLowerPriority`, and the ordered pair of not-ready/unreachable Exists
+NoExecute tolerations with exactly 300 seconds may be added to a template lacking
+those fields. Priority classes, changed values, extra tolerations and other fields
+remain unverified. The profile is bound into source identity; selecting it for an
+existing source requires a new epoch. The default remains exact template matching.
+
+The rules match the actual local v1.35.0 lab capture and the pinned upstream
+[priority admission](https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/plugin/pkg/admission/priority/admission.go)
+and [toleration admission](https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/plugin/pkg/admission/defaulttolerationseconds/admission.go)
+implementations. They are a narrow deployment profile, not universal admission
+defaults: priority classes and toleration configuration can differ.
+
+Within an already validated v1 PodList, absent item `apiVersion`/`kind` are supplied
+as `v1`/`Pod`, matching the typed list representation observed from the API.
+Explicit foreign or null values refuse. Named Pod GETs still require the full
+matching representation. Collection metadata retains the raw PodList SHA-256
+and records this normalization; the journal source bundle contains normalized
+items rather than claiming byte-for-byte wire identity.
 
 For each eligible successful terminal Pod, the collector makes three additional
 GETs: the named Pod, its single container's non-following log, then that Pod again.

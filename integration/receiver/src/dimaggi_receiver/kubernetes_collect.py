@@ -25,6 +25,7 @@ from .kubernetes_import import IDENTITY_KEYS, SCHEMA, _kubernetes_event, _persis
 from .observations import IDENTITIES, ObservationError, ObservationStore, _utc
 
 PROFILE = "kubernetes-job-response/v1.35.0-cpu/v1"
+POD_PROFILE = "kubernetes-pod-admission/v1.35.0-stock/v1"
 MAX_HISTORY_BYTES = 16 << 20
 MAX_HISTORY_EVENTS = 10000
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
@@ -48,6 +49,7 @@ class CollectorConfig:
     verifier_path: str
     verifier_digest: str
     profile: str = PROFILE
+    pod_profile: str = ""
     timeout_seconds: float = 5
     max_collection_seconds: float = 30
     response_limit: int = 1 << 20
@@ -84,7 +86,7 @@ class Collector:
             for value in (config.namespace_uid, config.job_uid, config.collector_id, config.source_epoch, config.cluster_id):
                 if not _TOKEN.fullmatch(value):
                     raise ValueError()
-            if (config.profile != PROFILE or not _SHA.fullmatch(config.verifier_digest)
+            if (config.profile != PROFILE or config.pod_profile not in ("", POD_PROFILE) or not _SHA.fullmatch(config.verifier_digest)
                     or not Path(config.verifier_path).is_absolute()
                     or not re.fullmatch(r"[A-Za-z0-9._~+/-]+=*", config.bearer_token)
                     or len(config.bearer_token) > 8192 or not 0 < len(config.ca_pem) <= 1 << 20
@@ -110,6 +112,8 @@ class Collector:
         # changes do, and must be explicitly represented as a new source epoch.
         self._descriptor = {"endpoint": config.endpoint, "ca_digest": "sha256:" + hashlib.sha256(config.ca_pem.encode()).hexdigest(),
                             "identity": self._identity, "target_id": config.target_id, "profile": config.profile, "verifier_digest": config.verifier_digest}
+        if config.pod_profile:
+            self._descriptor["pod_profile"] = config.pod_profile
 
     def __repr__(self):
         return "Collector(configuration redacted)"
@@ -278,6 +282,23 @@ class Collector:
             for name in ("hostNetwork", "hostPID", "hostIPC"):
                 if actual.get(name) is False:
                     actual.pop(name)
+            if self._config.pod_profile == POD_PROFILE:
+                # Explicit v1.35.0 stock admission profile; never strip unknown
+                # fields or accept configurable non-stock toleration values.
+                defaults = {"priority": 0, "preemptionPolicy": "PreemptLowerPriority",
+                    "tolerations": [
+                        {"key": "node.kubernetes.io/not-ready", "operator": "Exists",
+                         "effect": "NoExecute", "tolerationSeconds": 300},
+                        {"key": "node.kubernetes.io/unreachable", "operator": "Exists",
+                         "effect": "NoExecute", "tolerationSeconds": 300}]}
+                if (any(name in expected for name in defaults)
+                        or "priorityClassName" in actual or "priorityClassName" in expected
+                        or any(name not in actual or canonical(actual[name]) != canonical(value)
+                               for name, value in defaults.items())):
+                    all_specs = False
+                    continue
+                for name in defaults:
+                    actual.pop(name)
             if canonical(actual) != canonical(expected):
                 all_specs = False
                 continue
@@ -365,7 +386,7 @@ class Collector:
         self._namespace(namespace)
         job, raw_job = self._get(job_path, deadline, missing_job=True)
         match = None if job is None else self._match(raw_job, job, intent_json, report_json, deadline - time.monotonic())
-        pods, _ = self._get(namespace_path + "/pods?" + urlencode({"labelSelector": "batch.kubernetes.io/controller-uid=" + config.job_uid, "limit": "1000"}), deadline)
+        pods, raw_pods = self._get(namespace_path + "/pods?" + urlencode({"labelSelector": "batch.kubernetes.io/controller-uid=" + config.job_uid, "limit": "1000"}), deadline)
         if (pods.get("apiVersion") != "v1" or pods.get("kind") != "PodList" or type(pods.get("metadata")) is not dict
                 or not isinstance(pods["metadata"].get("resourceVersion"), str)
                 or not pods["metadata"]["resourceVersion"] or pods["metadata"].get("continue", "") != ""
@@ -373,6 +394,16 @@ class Collector:
                 or pods["metadata"].get("remainingItemCount", 0) != 0 or type(pods.get("items")) is not list
                 or len(pods["items"]) > 1000):
             raise ObservationError("complete bounded Pod list required")
+        # Kubernetes' typed list serializer omits per-item TypeMeta. Supply only
+        # absent fields under the validated v1 PodList, preserving raw-byte hash.
+        # Explicit null/foreign values refuse; named Pod GETs remain unchanged.
+        for item in pods["items"]:
+            if type(item) is not dict:
+                raise ObservationError("Pod list item must be an object")
+            for key, value in (("apiVersion", "v1"), ("kind", "Pod")):
+                if key in item and item[key] != value:
+                    raise ObservationError("Pod list item type refused")
+                item.setdefault(key, value)
         preliminary = {"schema": SCHEMA, "evidence_class": "observed", "collector_id": config.collector_id,
             "source_epoch": config.source_epoch, "source_sequence": sequence, "observed_at_utc": _stamp(self._clock()),
             **{key: registered[key] for key in IDENTITIES}, "identity": self._identity,
@@ -401,6 +432,9 @@ class Collector:
             "authentication_scope": "configured TLS API origin inside trusted collector process",
             "configuration_digest": descriptor_digest, "started_at_utc": start_stamp, "finished_at_utc": stamp,
             "pod_list_resource_version": pods["metadata"]["resourceVersion"], "job_match": match,
+            "pod_list_raw_digest": "sha256:" + hashlib.sha256(raw_pods).hexdigest(),
+            "pod_list_type_metadata": "absent item apiVersion/kind supplied from validated v1 PodList",
+            "pod_comparison_profile": config.pod_profile or "exact-job-template",
             "runtime_checks": runtime_checks,
             "pod_spec_verified": bool(runtime_checks) and all(item["spec_verified"] for item in runtime_checks),
             "output_verified": runtime_verified}

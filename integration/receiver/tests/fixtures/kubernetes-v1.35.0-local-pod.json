@@ -1,0 +1,539 @@
+{
+  "provenance": "Actual kind Kubernetes v1.35.0 local CPU campaign, 2026-09-20. Public resource metadata/spec/status only; no credentials. Unit tests replay these resources with mocked transport.",
+  "job": {
+    "apiVersion": "batch/v1",
+    "kind": "Job",
+    "metadata": {
+      "annotations": {
+        "dimaggi.ai/cluster-id": "kind-dimaggi-reliability",
+        "dimaggi.ai/namespace-uid": "01de3da4-4ea0-40f9-be12-f7f872ebffbe",
+        "dimaggi.ai/payload-config-digest": "sha256:c14855661b545533b8d7eda132463c2ea1f9ed2a8c88efc9ab0480e3488d9b64",
+        "dimaggi.ai/profile-digest": "sha256:19a79246e030a6892d6620cea16361bea95b49b9a694ffd27ae883a5753629d3"
+      },
+      "creationTimestamp": "2026-09-20T15:11:45Z",
+      "generation": 1,
+      "labels": {
+        "app.kubernetes.io/name": "dimaggi-cpu-lab",
+        "dimaggi.ai/request": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420"
+      },
+      "name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420",
+      "namespace": "dimaggi-lab",
+      "resourceVersion": "1153",
+      "uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943"
+    },
+    "spec": {
+      "activeDeadlineSeconds": 60,
+      "backoffLimit": 0,
+      "completionMode": "NonIndexed",
+      "completions": 1,
+      "manualSelector": false,
+      "parallelism": 1,
+      "podReplacementPolicy": "TerminatingOrFailed",
+      "selector": {
+        "matchLabels": {
+          "batch.kubernetes.io/controller-uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943"
+        }
+      },
+      "suspend": false,
+      "template": {
+        "metadata": {
+          "annotations": {
+            "dimaggi.ai/cluster-id": "kind-dimaggi-reliability",
+            "dimaggi.ai/namespace-uid": "01de3da4-4ea0-40f9-be12-f7f872ebffbe",
+            "dimaggi.ai/payload-config-digest": "sha256:c14855661b545533b8d7eda132463c2ea1f9ed2a8c88efc9ab0480e3488d9b64",
+            "dimaggi.ai/profile-digest": "sha256:19a79246e030a6892d6620cea16361bea95b49b9a694ffd27ae883a5753629d3"
+          },
+          "labels": {
+            "app.kubernetes.io/name": "dimaggi-cpu-lab",
+            "batch.kubernetes.io/controller-uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943",
+            "batch.kubernetes.io/job-name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420",
+            "controller-uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943",
+            "dimaggi.ai/request": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420",
+            "job-name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420"
+          }
+        },
+        "spec": {
+          "automountServiceAccountToken": false,
+          "containers": [
+            {
+              "args": [
+                "--request-id",
+                "local-smoke-01"
+              ],
+              "command": [
+                "/batch-cpu-payload"
+              ],
+              "image": "registry.invalid/dimaggi/cpu@sha256:b086ae36f7456c086f3bfe90591e2090fa03b96e82d8187cc6fe6ac12675c1a7",
+              "imagePullPolicy": "Never",
+              "name": "payload",
+              "resources": {
+                "limits": {
+                  "cpu": "500m",
+                  "ephemeral-storage": "16777216",
+                  "memory": "67108864"
+                },
+                "requests": {
+                  "cpu": "500m",
+                  "ephemeral-storage": "16777216",
+                  "memory": "67108864"
+                }
+              },
+              "securityContext": {
+                "allowPrivilegeEscalation": false,
+                "capabilities": {
+                  "drop": [
+                    "ALL"
+                  ]
+                },
+                "privileged": false,
+                "readOnlyRootFilesystem": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File"
+            }
+          ],
+          "dnsPolicy": "ClusterFirst",
+          "enableServiceLinks": false,
+          "nodeSelector": {
+            "kubernetes.io/arch": "arm64",
+            "kubernetes.io/os": "linux"
+          },
+          "os": {
+            "name": "linux"
+          },
+          "restartPolicy": "Never",
+          "schedulerName": "default-scheduler",
+          "securityContext": {
+            "runAsGroup": 65532,
+            "runAsNonRoot": true,
+            "runAsUser": 65532,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "serviceAccount": "dimaggi-submitter",
+          "serviceAccountName": "dimaggi-submitter",
+          "terminationGracePeriodSeconds": 1
+        }
+      }
+    },
+    "status": {
+      "completionTime": "2026-09-20T15:11:48Z",
+      "conditions": [
+        {
+          "lastProbeTime": "2026-09-20T15:11:48Z",
+          "lastTransitionTime": "2026-09-20T15:11:48Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "SuccessCriteriaMet"
+        },
+        {
+          "lastProbeTime": "2026-09-20T15:11:48Z",
+          "lastTransitionTime": "2026-09-20T15:11:48Z",
+          "message": "Reached expected number of succeeded pods",
+          "reason": "CompletionsReached",
+          "status": "True",
+          "type": "Complete"
+        }
+      ],
+      "ready": 0,
+      "startTime": "2026-09-20T15:11:45Z",
+      "succeeded": 1,
+      "terminating": 0,
+      "uncountedTerminatedPods": {}
+    }
+  },
+  "pod_list": {
+    "kind": "PodList",
+    "apiVersion": "v1",
+    "metadata": {
+      "resourceVersion": "1332"
+    },
+    "items": [
+      {
+        "metadata": {
+          "name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b4bfvn5",
+          "generateName": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420-",
+          "namespace": "dimaggi-lab",
+          "uid": "be0a3311-651c-4b2a-8181-2d6b68f831e8",
+          "resourceVersion": "1152",
+          "generation": 1,
+          "creationTimestamp": "2026-09-20T15:11:45Z",
+          "labels": {
+            "app.kubernetes.io/name": "dimaggi-cpu-lab",
+            "batch.kubernetes.io/controller-uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943",
+            "batch.kubernetes.io/job-name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420",
+            "controller-uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943",
+            "dimaggi.ai/request": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420",
+            "job-name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420"
+          },
+          "annotations": {
+            "dimaggi.ai/cluster-id": "kind-dimaggi-reliability",
+            "dimaggi.ai/namespace-uid": "01de3da4-4ea0-40f9-be12-f7f872ebffbe",
+            "dimaggi.ai/payload-config-digest": "sha256:c14855661b545533b8d7eda132463c2ea1f9ed2a8c88efc9ab0480e3488d9b64",
+            "dimaggi.ai/profile-digest": "sha256:19a79246e030a6892d6620cea16361bea95b49b9a694ffd27ae883a5753629d3"
+          },
+          "ownerReferences": [
+            {
+              "apiVersion": "batch/v1",
+              "kind": "Job",
+              "name": "dimaggi-217fc67d6c1309b708bece0c0d2937d81c506e1cef91c3d4b420",
+              "uid": "0f6357ae-753c-4a59-8498-dbbaff0b4943",
+              "controller": true,
+              "blockOwnerDeletion": true
+            }
+          ],
+          "managedFields": [
+            {
+              "manager": "kube-controller-manager",
+              "operation": "Update",
+              "apiVersion": "v1",
+              "time": "2026-09-20T15:11:45Z",
+              "fieldsType": "FieldsV1",
+              "fieldsV1": {
+                "f:metadata": {
+                  "f:annotations": {
+                    ".": {},
+                    "f:dimaggi.ai/cluster-id": {},
+                    "f:dimaggi.ai/namespace-uid": {},
+                    "f:dimaggi.ai/payload-config-digest": {},
+                    "f:dimaggi.ai/profile-digest": {}
+                  },
+                  "f:generateName": {},
+                  "f:labels": {
+                    ".": {},
+                    "f:app.kubernetes.io/name": {},
+                    "f:batch.kubernetes.io/controller-uid": {},
+                    "f:batch.kubernetes.io/job-name": {},
+                    "f:controller-uid": {},
+                    "f:dimaggi.ai/request": {},
+                    "f:job-name": {}
+                  },
+                  "f:ownerReferences": {
+                    ".": {},
+                    "k:{\"uid\":\"0f6357ae-753c-4a59-8498-dbbaff0b4943\"}": {}
+                  }
+                },
+                "f:spec": {
+                  "f:automountServiceAccountToken": {},
+                  "f:containers": {
+                    "k:{\"name\":\"payload\"}": {
+                      ".": {},
+                      "f:args": {},
+                      "f:command": {},
+                      "f:image": {},
+                      "f:imagePullPolicy": {},
+                      "f:name": {},
+                      "f:resources": {
+                        ".": {},
+                        "f:limits": {
+                          ".": {},
+                          "f:cpu": {},
+                          "f:ephemeral-storage": {},
+                          "f:memory": {}
+                        },
+                        "f:requests": {
+                          ".": {},
+                          "f:cpu": {},
+                          "f:ephemeral-storage": {},
+                          "f:memory": {}
+                        }
+                      },
+                      "f:securityContext": {
+                        ".": {},
+                        "f:allowPrivilegeEscalation": {},
+                        "f:capabilities": {
+                          ".": {},
+                          "f:drop": {}
+                        },
+                        "f:privileged": {},
+                        "f:readOnlyRootFilesystem": {}
+                      },
+                      "f:terminationMessagePath": {},
+                      "f:terminationMessagePolicy": {}
+                    }
+                  },
+                  "f:dnsPolicy": {},
+                  "f:enableServiceLinks": {},
+                  "f:nodeSelector": {},
+                  "f:os": {
+                    ".": {},
+                    "f:name": {}
+                  },
+                  "f:restartPolicy": {},
+                  "f:schedulerName": {},
+                  "f:securityContext": {
+                    ".": {},
+                    "f:runAsGroup": {},
+                    "f:runAsNonRoot": {},
+                    "f:runAsUser": {},
+                    "f:seccompProfile": {
+                      ".": {},
+                      "f:type": {}
+                    }
+                  },
+                  "f:serviceAccount": {},
+                  "f:serviceAccountName": {},
+                  "f:terminationGracePeriodSeconds": {}
+                }
+              }
+            },
+            {
+              "manager": "kubelet",
+              "operation": "Update",
+              "apiVersion": "v1",
+              "time": "2026-09-20T15:11:47Z",
+              "fieldsType": "FieldsV1",
+              "fieldsV1": {
+                "f:status": {
+                  "f:conditions": {
+                    "k:{\"type\":\"ContainersReady\"}": {
+                      ".": {},
+                      "f:lastProbeTime": {},
+                      "f:lastTransitionTime": {},
+                      "f:observedGeneration": {},
+                      "f:reason": {},
+                      "f:status": {},
+                      "f:type": {}
+                    },
+                    "k:{\"type\":\"Initialized\"}": {
+                      ".": {},
+                      "f:lastProbeTime": {},
+                      "f:lastTransitionTime": {},
+                      "f:observedGeneration": {},
+                      "f:reason": {},
+                      "f:status": {},
+                      "f:type": {}
+                    },
+                    "k:{\"type\":\"PodReadyToStartContainers\"}": {
+                      ".": {},
+                      "f:lastProbeTime": {},
+                      "f:lastTransitionTime": {},
+                      "f:observedGeneration": {},
+                      "f:status": {},
+                      "f:type": {}
+                    },
+                    "k:{\"type\":\"PodScheduled\"}": {
+                      "f:observedGeneration": {}
+                    },
+                    "k:{\"type\":\"Ready\"}": {
+                      ".": {},
+                      "f:lastProbeTime": {},
+                      "f:lastTransitionTime": {},
+                      "f:observedGeneration": {},
+                      "f:reason": {},
+                      "f:status": {},
+                      "f:type": {}
+                    }
+                  },
+                  "f:containerStatuses": {},
+                  "f:hostIP": {},
+                  "f:hostIPs": {},
+                  "f:observedGeneration": {},
+                  "f:phase": {},
+                  "f:podIP": {},
+                  "f:podIPs": {
+                    ".": {},
+                    "k:{\"ip\":\"10.244.0.11\"}": {
+                      ".": {},
+                      "f:ip": {}
+                    }
+                  },
+                  "f:startTime": {}
+                }
+              },
+              "subresource": "status"
+            }
+          ]
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "payload",
+              "image": "registry.invalid/dimaggi/cpu@sha256:b086ae36f7456c086f3bfe90591e2090fa03b96e82d8187cc6fe6ac12675c1a7",
+              "command": [
+                "/batch-cpu-payload"
+              ],
+              "args": [
+                "--request-id",
+                "local-smoke-01"
+              ],
+              "resources": {
+                "limits": {
+                  "cpu": "500m",
+                  "ephemeral-storage": "16777216",
+                  "memory": "67108864"
+                },
+                "requests": {
+                  "cpu": "500m",
+                  "ephemeral-storage": "16777216",
+                  "memory": "67108864"
+                }
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "imagePullPolicy": "Never",
+              "securityContext": {
+                "capabilities": {
+                  "drop": [
+                    "ALL"
+                  ]
+                },
+                "privileged": false,
+                "readOnlyRootFilesystem": true,
+                "allowPrivilegeEscalation": false
+              }
+            }
+          ],
+          "restartPolicy": "Never",
+          "terminationGracePeriodSeconds": 1,
+          "dnsPolicy": "ClusterFirst",
+          "nodeSelector": {
+            "kubernetes.io/arch": "arm64",
+            "kubernetes.io/os": "linux"
+          },
+          "serviceAccountName": "dimaggi-submitter",
+          "serviceAccount": "dimaggi-submitter",
+          "automountServiceAccountToken": false,
+          "nodeName": "dimaggi-reliability-control-plane",
+          "securityContext": {
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "runAsNonRoot": true,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          },
+          "schedulerName": "default-scheduler",
+          "tolerations": [
+            {
+              "key": "node.kubernetes.io/not-ready",
+              "operator": "Exists",
+              "effect": "NoExecute",
+              "tolerationSeconds": 300
+            },
+            {
+              "key": "node.kubernetes.io/unreachable",
+              "operator": "Exists",
+              "effect": "NoExecute",
+              "tolerationSeconds": 300
+            }
+          ],
+          "priority": 0,
+          "enableServiceLinks": false,
+          "preemptionPolicy": "PreemptLowerPriority",
+          "os": {
+            "name": "linux"
+          }
+        },
+        "status": {
+          "observedGeneration": 1,
+          "phase": "Succeeded",
+          "conditions": [
+            {
+              "type": "PodReadyToStartContainers",
+              "observedGeneration": 1,
+              "status": "False",
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-09-20T15:11:47Z"
+            },
+            {
+              "type": "Initialized",
+              "observedGeneration": 1,
+              "status": "True",
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-09-20T15:11:45Z",
+              "reason": "PodCompleted"
+            },
+            {
+              "type": "Ready",
+              "observedGeneration": 1,
+              "status": "False",
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-09-20T15:11:45Z",
+              "reason": "PodCompleted"
+            },
+            {
+              "type": "ContainersReady",
+              "observedGeneration": 1,
+              "status": "False",
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-09-20T15:11:45Z",
+              "reason": "PodCompleted"
+            },
+            {
+              "type": "PodScheduled",
+              "observedGeneration": 1,
+              "status": "True",
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-09-20T15:11:45Z"
+            }
+          ],
+          "hostIP": "172.20.0.2",
+          "hostIPs": [
+            {
+              "ip": "172.20.0.2"
+            }
+          ],
+          "podIP": "10.244.0.11",
+          "podIPs": [
+            {
+              "ip": "10.244.0.11"
+            }
+          ],
+          "startTime": "2026-09-20T15:11:45Z",
+          "containerStatuses": [
+            {
+              "name": "payload",
+              "state": {
+                "terminated": {
+                  "exitCode": 0,
+                  "reason": "Completed",
+                  "startedAt": "2026-09-20T15:11:45Z",
+                  "finishedAt": "2026-09-20T15:11:45Z",
+                  "containerID": "containerd://2e3880a53135a3ed244963c8f805ab7e1b00fc7000d85bf986b8f35fb9bd3c84"
+                }
+              },
+              "lastState": {},
+              "ready": false,
+              "restartCount": 0,
+              "image": "sha256:70e4dabf6931074206292fe42f33a907e54404e7bcd8d2fa1d0ce5aa581f350c",
+              "imageID": "registry.invalid/dimaggi/cpu@sha256:b086ae36f7456c086f3bfe90591e2090fa03b96e82d8187cc6fe6ac12675c1a7",
+              "containerID": "containerd://2e3880a53135a3ed244963c8f805ab7e1b00fc7000d85bf986b8f35fb9bd3c84",
+              "started": false,
+              "allocatedResources": {
+                "cpu": "500m",
+                "ephemeral-storage": "16777216",
+                "memory": "67108864"
+              },
+              "resources": {
+                "limits": {
+                  "cpu": "500m",
+                  "ephemeral-storage": "16777216",
+                  "memory": "67108864"
+                },
+                "requests": {
+                  "cpu": "500m",
+                  "ephemeral-storage": "16777216",
+                  "memory": "67108864"
+                }
+              },
+              "user": {
+                "linux": {
+                  "uid": 65532,
+                  "gid": 65532,
+                  "supplementalGroups": [
+                    65532
+                  ]
+                }
+              }
+            }
+          ],
+          "qosClass": "Guaranteed"
+        }
+      }
+    ]
+  },
+  "stdout": "{\"schema\":\"dimaggi-cpu-payload/v1\",\"request_id\":\"local-smoke-01\",\"iterations\":10000,\"digest\":\"sha256:91b6f53934d40999dafaff32c877938ce9c9b3dc1f5f9680474f28eb249d671c\"}\n"
+}
