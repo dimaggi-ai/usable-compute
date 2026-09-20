@@ -1,6 +1,19 @@
 # DIMAGGI AI — Usable Compute
 
-**AI infrastructure models, standards, and decision frameworks.**
+**Turn infrastructure into dependable, usable compute.**
+
+DIMAGGI connects workload planning, compute, networks, storage, power and governed
+operations through explicit contracts and traceable evidence. The aim is to make
+infrastructure decisions account for the whole system: what a workload needs,
+where it fits, which changes are authorized, and what actually happened.
+
+The installable [infrastructure receiver](integration/receiver/INFRASTRUCTURE.md)
+combines versioned capabilities, exact software compatibility, shared resource
+budgets and observed-state reconciliation. Its CPU evidence connects to TENWA's
+signed execution configuration. Training, inference and agentic workloads share
+the planning contract; live TPU/GPU execution remains a separate validation step.
+See the [delivery assessment](integration/receiver/DELIVERY-ASSESSMENT.md) for the
+boundary between implemented software, local lab evidence and remaining proof.
 
 Turning AI infrastructure investment into usable compute: a portfolio covering
 scheduling, networking, reliability, power, cooling, placement, and governed operations.

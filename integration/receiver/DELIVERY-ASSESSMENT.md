@@ -1,0 +1,18 @@
+# Delivery assessment
+
+The original objective is one interconnected system: source-backed decisions, an application workflow, governed execution, observed outcomes and controlled improvement. The infrastructure increment implements a reusable compatibility and evidence boundary in the existing receiver and TENWA repositories. It does not establish that every original team deliverable is complete.
+
+| Original delivery area | Current implementation and remaining acceptance |
+|---|---|
+| Domain decisions and model evidence | Existing locked adapters call the owning scheduling, network, cooling, reliability, geometry and admission code. New capabilities add explicit hardware/software identity and resource constraints. Representative workload calibration and operator evidence remain open. |
+| Application and interoperability | Installed receiver commands produce deterministic plans, CPU bindings, reconciliation and release-drift reports. Cross-language tests use the compiled TENWA planner; the executor retains signed configuration and attempt records. Provider-specific live accelerator collectors and dispatchers remain open. |
+| CPU lab and governed execution | The earlier local Kubernetes campaign established a bounded signed CPU run, duplicate/revocation refusal and collector verification. New infrastructure-bound executor cases exercise a controlled TLS test peer. Those test-peer results must not be presented as a new Kubernetes or accelerator campaign. |
+| Synthetic data and chaos testing | Deterministic fixtures, seeded conservation tests, shared-resource contention, unknown-generation/version faults, identity drift, stale evidence and last-moment expiry extend the existing chaos/attempt suites. Physical XID, RDMA, TPU ICI, rack-power and cooling faults require suitable hardware. |
+| Independent reproduction | Clean installation and automated replay are engineering evidence. They cannot replace a different engineer's independent acceptance. Previously sent sealed packets remain at their original pins; this change is a reviewable PR update, not another silently revised packet. |
+| Research and release watch | Archived official sources inform executable constraints, an explicit-unit adapter and a quarantined registry diff. No unattended release activation exists. Authenticated course lesson coverage and unresolved vendor compatibility details remain incomplete. |
+| Improvement process / RSI | Existing read-only digest work remains separate from the runtime. Four weekly observations, useful dispositions, matched review effort and independent protected evaluation cannot be manufactured by repeated same-day runs. No autonomous self-modification or weakened evaluator is introduced. |
+| Portfolio reuse | Existing repositories remain the implementation homes. Experimental infrastructure-assurance is not promoted into an approval gate; optical, edge and AI-RAN research remains scoped to its own validated models. Connecting those models to new live targets needs concrete contracts and evidence. |
+
+Reliability is tested through refusal, identity and failure recovery. Efficiency is addressed through deterministic bounded work and explicit resource accounting. Scalability is bounded and measured locally; it is not a distributed scheduler or multi-site performance claim. Wider automation should follow authenticated observations and representative acceptance, rather than importing every collected document into runtime policy.
+
+Editorial review: passed — implementation claims separated from proposed scope, test-peer evidence, historical lab evidence and independent acceptance.

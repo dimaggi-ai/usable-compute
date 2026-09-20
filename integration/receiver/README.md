@@ -1,3 +1,7 @@
+> **Infrastructure integration:** receiver 0.1.7 adds versioned capability planning,
+> shared resource budgets, CPU execution evidence and infrastructure reconciliation.
+> Start with [the integrated workflow](INFRASTRUCTURE.md) and [delivery assessment](DELIVERY-ASSESSMENT.md).
+
 # First-slice offline receiver
 
 This installable application calls Maggie's existing domain implementations and
@@ -233,7 +237,7 @@ Other operating systems remain outside file-journal support.
 
 Version 0.1.5 adds the opt-in [TLS collection library](KUBERNETES-COLLECT.md). A trusted host supplies the target, public CA, in-memory credential, pinned Job identity and hashed TENWA verifier. This path reads Kubernetes resources and bounded output into the existing observation journal. Existing file-import and model CLI paths retain their original scope; arbitrary input cannot enable network collection. The collector grants no execution permission or automatic retry.
 
-The complete local acceptance suite also runs `test_collection_roundtrip.py` with the actual TENWA object verifier and payload binaries. The public installed-wheel workflow explicitly excludes that file together with the two existing TENWA subprocess suites; it runs the collector's local TLS and independent adversarial tests. The release reproduction script supplies all three binaries and fails if required tests skip.
+The complete local acceptance suite also runs `test_collection_roundtrip.py` with the actual TENWA object verifier and payload binaries. The public installed-wheel workflow explicitly excludes that file together with the policy, journal and infrastructure-binding TENWA subprocess suites; it runs the collector's local TLS and independent adversarial tests. The historical release reproduction script retains its original three interfaces. The current [combined verification command](INFRASTRUCTURE.md#combined-acceptance-automation) also supplies the infrastructure planner interface and refuses skipped tests.
 
 ### Explicit local Kubernetes Pod compatibility (0.1.6)
 

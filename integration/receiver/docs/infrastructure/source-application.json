@@ -1,0 +1,451 @@
+{
+  "schema": "dimaggi-source-application/v1",
+  "sources": [
+    {
+      "id": "tpu-release-notes",
+      "url": "https://docs.cloud.google.com/tpu/docs/release-notes",
+      "archive_sha256": "842f0dcef3faed6f7be5e725000dbcffdb25be9ebc0a06caa5a8972d74c70f92",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-runtimes",
+      "url": "https://docs.cloud.google.com/tpu/docs/runtimes",
+      "archive_sha256": "7164785f159ca2c2f928fe0e8d03901c12b8024e3fccea8cce1e49cbe168cc65",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu7x",
+      "url": "https://docs.cloud.google.com/tpu/docs/tpu7x",
+      "archive_sha256": "aefaebabea05b838961d3237696f806931cb1748ec308e63261c9179867f6284",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpus-in-compute-engine",
+      "url": "https://docs.cloud.google.com/tpu/docs/tpus-in-compute-engine",
+      "archive_sha256": "0358eb7eb98e4087ab936c306a3dc9982f6370e20a6d0bd576fa4a541109f2f2",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "ai-zones",
+      "url": "https://docs.cloud.google.com/compute/docs/regions-zones/ai-zones",
+      "archive_sha256": "03fd0cdb38099805a9387ec9b1f63307df0c1a2fae38741d353003b3f4f62e25",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-system-architecture",
+      "url": "https://docs.cloud.google.com/tpu/docs/system-architecture-tpu-vm",
+      "archive_sha256": "12bcbcbdc9ef164375adf61bcfc3d70675a6cac749706fbfdd5aa19610c97c43",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-v4",
+      "url": "https://docs.cloud.google.com/tpu/docs/v4",
+      "archive_sha256": "9f8657470de13b08f2dffa15b7b17bc765655c65387fc2c36022eb5862050017",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-v5e",
+      "url": "https://docs.cloud.google.com/tpu/docs/v5e",
+      "archive_sha256": "53e1ad4e5defd5e76991a06ef51a90b64b63484a97055c8001e46e70fad7c20d",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-v5p",
+      "url": "https://docs.cloud.google.com/tpu/docs/v5p",
+      "archive_sha256": "09ab55ba6af1d0ac35e53a9cc0a7a7c99b1f9e082ebdad1d1c06f343c093bb75",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-v6e",
+      "url": "https://docs.cloud.google.com/tpu/docs/v6e",
+      "archive_sha256": "26c757567f39a8be87854cd72a3a5d7090c506b2c8705333f434ac72fa3a0215",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "gke-plan-tpus",
+      "url": "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/plan-tpus",
+      "archive_sha256": "03632d288626761e392d9002636f99be35c8c3ccf5c1392dafd43ee827f2d003",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpus-in-gke",
+      "url": "https://docs.cloud.google.com/tpu/docs/tpus-in-gke",
+      "archive_sha256": "c98cf1a92e8e4e90a83824571ce3d91ee4e310e56888e253e9dc5cc34abb4e2e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-multislice",
+      "url": "https://docs.cloud.google.com/tpu/docs/multislice-introduction",
+      "archive_sha256": "07d7253479fbb9a0ab2a1bde6347c7236862aa6b9710048ff41b0f405cedb035",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-maintenance-events",
+      "url": "https://docs.cloud.google.com/tpu/docs/maintenance-events",
+      "archive_sha256": "2b0045440ab59dcd749a4f016e72c7ac480c8f3ea4efc0295125b17febcc0067",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-monitoring",
+      "url": "https://docs.cloud.google.com/tpu/docs/monitor-tpu",
+      "archive_sha256": "72d284cc5c59944306a6b6adc627480e1ae33c43b3fb2e661ddd648d5b500385",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-monitoring-library",
+      "url": "https://docs.cloud.google.com/tpu/docs/tpu-monitoring-library",
+      "archive_sha256": "e48219523863aa667719f686af86c51a1df64b7b4d9d1ef2782cbe1c3167d495",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-health",
+      "url": "https://docs.cloud.google.com/tpu/docs/troubleshooting/tpu-health",
+      "archive_sha256": "e1cbca2b9468b457ab5c7496236c71d113087a9ed6329b25ed68fccff588351e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-calendar-reservation",
+      "url": "https://docs.cloud.google.com/tpu/docs/calendar-mode-reservation",
+      "archive_sha256": "5c15e6043afd8a55ae9671961969f2e2ed99b7b219b197ae6e7bb7bb43ecf52e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-flex-start",
+      "url": "https://docs.cloud.google.com/tpu/docs/request-using-flex-start",
+      "archive_sha256": "a1f8a94e2258ce93fc6ae74af9288ae1763c054818351f3b4f12dd55e6609179",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-share-reservation",
+      "url": "https://docs.cloud.google.com/tpu/docs/share-reservation",
+      "archive_sha256": "ae587a59bf3042027448f50a2c0de2829854292cc1741330f53c4a81320adf29",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "gke-tpu-inference-autoscaling-best-practices",
+      "url": "https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference/autoscaling-tpu",
+      "archive_sha256": "38241e130e87261f1de779fbdfa539025cb78fa5798a44df4b44cf865fd4c2a6",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "gke-tpu-inference-autoscaling",
+      "url": "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/machine-learning/inference/autoscaling-tpu",
+      "archive_sha256": "801ce5197e84d6287927b566391068c13b083b3773aa9eedd5c478a196662b29",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "gke-inference-best-practices",
+      "url": "https://docs.cloud.google.com/kubernetes-engine/docs/best-practices/machine-learning/inference",
+      "archive_sha256": "269ab74a7664b0165258a90f102aa8efa6719af457d4f42b3122b639fee5986a",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu7x-training",
+      "url": "https://docs.cloud.google.com/tpu/docs/tpu7x-training",
+      "archive_sha256": "ff8a90976c28075320cda17f7489b32d6d16495222452ac8380b0c3e1eec53b0",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "tpu-quota",
+      "url": "https://docs.cloud.google.com/tpu/docs/quota",
+      "archive_sha256": "bfbd37ffb2ba67ab3484e6d44138e7d56cde2f1412929f8146e36882226bfdb2",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-index",
+      "url": "https://docs.nvidia.com/vgpu/index.html",
+      "archive_sha256": "b02a5700b5923c321a5796341c910cc8ee399e57a641dd339b6a3d88f3ffe458",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-20",
+      "url": "https://docs.nvidia.com/vgpu/20.0/",
+      "archive_sha256": "7928d8804531cd6eb69d1f0c008ee4b3e6da3240108a8eea76be7790bbd89c66",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-20-release-notes",
+      "url": "https://docs.nvidia.com/vgpu/latest/grid-vgpu-release-notes-vmware-vsphere/release-notes.html",
+      "archive_sha256": "a1e0deed62b524bd94b06cf646099fb5d387e282855b157b981c0f8f42037862",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-20-all-hypervisors",
+      "url": "https://docs.nvidia.com/vgpu/20.0/whats-new-vgpu/release-notes.html",
+      "archive_sha256": "0d4088b91b0833b27805ffe2a8058fadcd96da8239b7c2cb54093a9714f2b2de",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-20-product-support",
+      "url": "https://docs.nvidia.com/vgpu/20.0/product-support-matrix/index.html",
+      "archive_sha256": "689730f69aa079bdaf17a480ac9907c95b5ef6fe49114301426ee29a555a64ad",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-20-linux-kvm-release-notes",
+      "url": "https://docs.nvidia.com/vgpu/20.0/grid-vgpu-release-notes-generic-linux-kvm/release-notes.html",
+      "archive_sha256": "80232ca8cd51d51fc3ec531fe597de6b8ee15cec63896759de27f6c26503e778",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-supported-gpus",
+      "url": "https://docs.nvidia.com/vgpu/gpus-supported-by-vgpu.html",
+      "archive_sha256": "5787ea8e33002ce4fc2ff16d9b3c1e591d805a89dc574ab3ce07ee54a0ae5d2f",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "vgpu-lifecycle",
+      "url": "https://docs.nvidia.com/vgpu/news/vgpu-software-lifecycle-on-supported-gpus/index.html",
+      "archive_sha256": "800eef702740d2b0090e4f33cc6cf61004ba582ff3c1d8ff03035999cf093a3e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "gpu-operator-release-notes",
+      "url": "https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/release-notes.html",
+      "archive_sha256": "68df7b9c0c1421a4c195e483e7fa8571a82428d6275447fde4295dc5db7b47fc",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "gpu-operator-platform-support",
+      "url": "https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/platform-support.html",
+      "archive_sha256": "297c9fc50876d7a904c872b3cff9c65b8c59db47ed9a5518cdb80690d22672d9",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "network-operator-25.10-release-notes",
+      "url": "https://docs.nvidia.com/networking/display/kubernetes25100/release-notes.html",
+      "archive_sha256": "1c985574b2c6fdf1eabd8c0f7a7e4a5ab187b2905defb453a37a1548e033fcec",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "network-operator-25.10-platform-support",
+      "url": "https://docs.nvidia.com/networking/display/kubernetes25100/platform-support.html",
+      "archive_sha256": "70e1449efd60443f363f6e7364eb8f745f45a9a2049a7a298d708d3e67b99cf0",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "network-operator-26.7-release-notes",
+      "url": "https://docs.nvidia.com/networking/display/kubernetes2670/release-notes.html",
+      "archive_sha256": "e4eee62347be1265c9cb28cddde78637cb87809c166db3060dd50eab4484993a",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "network-operator-26.7-platform-support",
+      "url": "https://docs.nvidia.com/networking/display/kubernetes2670/platform-support.html",
+      "archive_sha256": "d2fd3bcadb07b07d4c15d478604dd53da8260a8615f9bb6c01249957690bc91d",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "dcgm-release-notes",
+      "url": "https://docs.nvidia.com/datacenter/dcgm/latest/release-notes/changelog.html",
+      "archive_sha256": "492e357344837a0246c22ceeb8f6bcc5439f855aee120c370025139af7301b98",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "data-center-driver-index",
+      "url": "https://docs.nvidia.com/datacenter/tesla/index.html",
+      "archive_sha256": "9e51b0fe300c749a3e42589dd10c975b8489852effb5cc14180e8384cf11ab82",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "driver-cuda-compatibility",
+      "url": "https://docs.nvidia.com/datacenter/tesla/drivers/supported-drivers-and-cuda-toolkit-versions.html",
+      "archive_sha256": "08cd83370babec2b7c6f3306f3ee7a7c4a96c724715775debdd8d38c49d2de78",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "driver-r615-615.71.09",
+      "url": "https://docs.nvidia.com/datacenter/tesla/tesla-release-notes-615-71-09/index.html",
+      "archive_sha256": "c5f57f66820daf8d3915761b8d4ea7f11bd5087288b292e414ea14e9b4632f2e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "driver-r595-595.91.07",
+      "url": "https://docs.nvidia.com/datacenter/tesla/tesla-release-notes-595-91-07/index.html",
+      "archive_sha256": "ba5803bbeb58491941f410a1d88331e7af6f9e0c05fc11d7348a21b53e44ab31",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "driver-r580-580.178.04",
+      "url": "https://docs.nvidia.com/datacenter/tesla/tesla-release-notes-580-178-04/index.html",
+      "archive_sha256": "4b0cb84c959a756ff8c98cd5bce40f61e794302970f1d9554cef4b5176e8d4d3",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "mig-user-guide",
+      "url": "https://docs.nvidia.com/datacenter/tesla/mig-user-guide/index.html",
+      "archive_sha256": "334f8ecd139e442c3a3a09eb6e6dbfb2355083cbf98dc27835ad8a3fd40c700e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "fabric-manager",
+      "url": "https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html",
+      "archive_sha256": "1f8a4b4ee5f2ef94897ce9303ef2f4594f95710323bc91540ec4510459d751f6",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "ai-enterprise-support-matrix",
+      "url": "https://docs.nvidia.com/ai-enterprise/support-matrix/latest/index.html",
+      "archive_sha256": "e1489f6f589773e6bc644e097b22c7ad4a8b6498cd2f60a1334fcd211553e023",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "nccl-archives",
+      "url": "https://docs.nvidia.com/deeplearning/nccl/archives/index.html",
+      "archive_sha256": "cbd639650c9f07a73eaf6db23131b2fb519f3e7c9a94b0941f40d3af1b21cf86",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "nccl-2.31.2-release-notes",
+      "url": "https://docs.nvidia.com/deeplearning/nccl/archives/nccl_2312/release-notes/rel_2-31-2.html",
+      "archive_sha256": "d7efe34ca710192c1232546f12c02afbd9415f0fd9472d6d862e5ea3e92938a1",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "container-toolkit-release-notes",
+      "url": "https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/release-notes.html",
+      "archive_sha256": "232288cd52d265e72b83a3d48ca7ea8dee8b0494164fbc5812910621ae63afd7",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "xid-errors",
+      "url": "https://docs.nvidia.com/deploy/xid-errors/index.html",
+      "archive_sha256": "306a68dce7e5cb0e699b7206555787c37ba29e94e1aa12a4a4f245687f95a37f",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "mission-control-2.3-release-notes",
+      "url": "https://docs.nvidia.com/mission-control/docs/systems-quick-start-guide/2.3.0/nmc-release-notes.html",
+      "archive_sha256": "67adb8431f71c3e92e051d6d293c8d81ba70a38abbcf0f566e6d6ead473b2e0e",
+      "observed_date": "2026-09-20",
+      "application": "compatibility_tuple_and_release_review",
+      "runtime_activation": "requires_separate_validated_profile"
+    }
+  ],
+  "scope": "Archived public official pages; not authenticated course lessons or hardware validation.",
+  "implemented_controls": [
+    "explicit_device_units",
+    "exact_stack_tuple",
+    "profile_validity",
+    "release_diff_quarantine",
+    "observed_headroom_expiry",
+    "workload_archetypes",
+    "shared_resource_budgets",
+    "bound_cpu_execution",
+    "attributed_reconciliation",
+    "synthetic_chaos_tests"
+  ],
+  "unresolved_source_issues": [
+    "TPU memory GB versus GiB must be resolved per profile; no silent conversion.",
+    "Do not equate pod maximum with an orchestration slice maximum.",
+    "Driver lifecycle and product-suite compatibility are separate facts.",
+    "Network and GPU operator shared-dependency conflicts require a tested tuple.",
+    "No TPUv10 capability is inferred.",
+    "Course catalogs do not establish complete lesson or transcript coverage.",
+    "Dynamic compatibility tables and detailed hardware fault behavior require further verified inputs."
+  ]
+}

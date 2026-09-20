@@ -11,6 +11,7 @@ from .bindings import policy_input
 from .jsonio import dumps, loads, read_file, read_stream
 from .report import build_report
 from .sources import verify_bundle
+from . import infrastructure_cli
 from .observation_cli import COMMANDS, add_commands, run as run_observation
 
 
@@ -28,9 +29,12 @@ def main(argv=None):
     sub.add_argument("--report", required=True, type=Path)
     sub.add_argument("--request-id", required=True)
     add_commands(commands)
+    infrastructure_cli.add_commands(commands)
     args = parser.parse_args(argv)
     try:
-        if args.command in COMMANDS:
+        if args.command in infrastructure_cli.COMMANDS:
+            result = infrastructure_cli.run(args)
+        elif args.command in COMMANDS:
             result = run_observation(args)
         elif args.command == "model":
             result = build_report(args.sources, args.case)
