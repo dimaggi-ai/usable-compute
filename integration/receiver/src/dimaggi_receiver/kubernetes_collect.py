@@ -25,6 +25,8 @@ from .kubernetes_import import IDENTITY_KEYS, SCHEMA, _kubernetes_event, _persis
 from .observations import IDENTITIES, ObservationError, ObservationStore, _utc
 
 PROFILE = "kubernetes-job-response/v1.35.0-cpu/v1"
+MAX_HISTORY_BYTES = 16 << 20
+MAX_HISTORY_EVENTS = 10000
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 _TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}\Z")
 _SHA = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -335,6 +337,14 @@ class Collector:
         start_stamp = _stamp(started)
         if _utc(start_stamp) >= _utc(config.valid_until_utc):
             raise ObservationError("collector configuration expired")
+        # Bound the materialized per-request history before decoding it. This
+        # never projects/truncates history or removes records from the journal.
+        history_count, history_bytes = store.db.execute(
+            "SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM events WHERE request_id=?",
+            (request_id,),
+        ).fetchone()
+        if history_count >= MAX_HISTORY_EVENTS or history_bytes >= MAX_HISTORY_BYTES:
+            raise ObservationError("collector history limit reached; archive remains intact")
         history = store.history(request_id)
         descriptor_digest = digest(self._descriptor)
         previous = [item["event"] for item in history if item["event"]["kind"] == "workload"
@@ -399,6 +409,7 @@ class Collector:
         if event["state"] == "succeeded" and not runtime_verified:
             event["state"] = "unknown"
             event["payload"]["interpretation_reasons"].append("runtime_pod_spec_and_output_not_verified")
-        if len(canonical(event)) > MAX_BYTES:
+        event_bytes = len(canonical(event))
+        if event_bytes > MAX_BYTES or history_bytes + event_bytes > MAX_HISTORY_BYTES:
             raise ObservationError("combined collection exceeds application input bound")
         return _persist_event(store, event, expected_identity=self._identity, recorded_at_utc=stamp)

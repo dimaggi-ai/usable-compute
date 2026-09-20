@@ -187,3 +187,33 @@ def test_observed_json_cannot_enter_synthetic_import(lab):
 def test_config_and_collector_representations_redact_credentials(lab):
     assert "TEST-COLLECTOR-CREDENTIAL" not in repr(lab[0])
     assert "TEST-COLLECTOR-CREDENTIAL" not in repr(Collector(lab[0]))
+
+
+@pytest.mark.parametrize("bound", ["MAX_HISTORY_BYTES", "MAX_HISTORY_EVENTS"])
+def test_collector_refuses_full_history_without_reading_network_or_truncating(lab, monkeypatch, bound):
+    import dimaggi_receiver.kubernetes_collect as module
+    collect(lab)
+    before = lab[3].history("request-1")
+    calls = len(lab[2])
+    monkeypatch.setattr(module, bound, 1)
+    with pytest.raises(ObservationError, match="history limit"):
+        collect(lab)
+    assert lab[3].history("request-1") == before and len(lab[2]) == calls
+
+
+def test_collector_refuses_append_beyond_full_history_byte_cap(lab, monkeypatch):
+    import dimaggi_receiver.kubernetes_collect as module
+    collect(lab)
+    before = lab[3].history("request-1")
+    calls = len(lab[2])
+    stored_bytes = lab[3].db.execute(
+        "SELECT SUM(LENGTH(CAST(body AS BLOB))) FROM events WHERE request_id=?",
+        ("request-1",),
+    ).fetchone()[0]
+    # Existing history fits, so collection proceeds; the complete new event
+    # cannot fit and must be refused before any durable append.
+    monkeypatch.setattr(module, "MAX_HISTORY_BYTES", stored_bytes + 1)
+    with pytest.raises(ObservationError, match="combined collection"):
+        collect(lab)
+    assert len(lab[2]) > calls
+    assert lab[3].history("request-1") == before

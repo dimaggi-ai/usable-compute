@@ -111,6 +111,12 @@ raw server content is safe to publish.
 
 ## Journal continuity and use
 
+Before materializing a request history, the collector checks its stored byte
+count and event count. Collection refuses at 10,000 events or 16 MiB, and refuses
+an append that would exceed the byte cap. History is never truncated or deleted;
+archival/retention operations require a separate reviewed contract. This bounds
+collector history memory, not the duration of arbitrary storage operations.
+
 The collector derives the next source sequence from durable history, including
 after a real store reopen. The same source epoch cannot silently change its
 endpoint, CA, identity, target, profile or verifier digest. An explicit new epoch
