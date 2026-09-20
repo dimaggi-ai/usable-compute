@@ -50,8 +50,8 @@ def main():
     output = args.output.resolve()
     if not (tenwa / "internal/batchexecutor/executor.go").is_file():
         raise ValueError("reviewed TENWA checkout required")
-    if importlib.metadata.version("dimaggi-offline-receiver") != "0.1.7":
-        raise ValueError("install receiver 0.1.7 first")
+    if importlib.metadata.version("dimaggi-offline-receiver") != "0.1.8":
+        raise ValueError("install receiver 0.1.8 first")
     from dimaggi_receiver.sources import verify_bundle
 
     verify_bundle(sources)

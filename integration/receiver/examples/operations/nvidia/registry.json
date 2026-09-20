@@ -1,0 +1,45 @@
+{
+  "profiles": [
+    {
+      "archetypes": [
+        "inference"
+      ],
+      "device_unit": "gpu",
+      "generation": "cpu-test",
+      "id": "synthetic.nvidia.test-v1",
+      "isolation": [
+        "dedicated-namespace"
+      ],
+      "memory_bytes_per_device": 1073741824,
+      "partition": "whole",
+      "precisions": [
+        "int64"
+      ],
+      "provider": "nvidia",
+      "source_digests": [
+        "sha256:e29986d6824397baf09d331c6ad367d7a5b60d540fd505d5979cbb2e63d7fdad"
+      ],
+      "stack": {
+        "architecture": "arm64",
+        "collectives": "none",
+        "device_plugin": "none",
+        "driver": "580.1",
+        "framework": "cpu-payload-1",
+        "network_plugin": "test-cni-1",
+        "orchestrator": "kubernetes-1.35.0",
+        "os": "linux",
+        "runtime": "test-runtime-1"
+      },
+      "state": "validated",
+      "topologies": [
+        "single-host"
+      ],
+      "valid_from": "2026-09-20T00:00:00Z",
+      "valid_until": "2026-09-21T00:00:00Z",
+      "validation_class": "synthetic",
+      "validation_evidence": "sha256:3a162ba4fa66670f4901b863903991642aea9367ac5b0c446cf5729df621e194"
+    }
+  ],
+  "revision": "synthetic-1",
+  "schema": "dimaggi-infrastructure/v1"
+}

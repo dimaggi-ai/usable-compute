@@ -1,3 +1,6 @@
+> Receiver 0.1.8 adds [telemetry, source review and operational replays](OPERATIONS.md).
+> Required unknown measurements refuse; explicitly unrequested constraints are reported.
+
 # Infrastructure-aware planning and execution evidence
 
 DIMAGGI connects workload intent to the infrastructure that must support it: compute, topology, network, storage, power, recovery and the software stack. The purpose is to make usable capacity and safe operating decisions visible across those boundaries. A larger accelerator count alone cannot answer whether a workload fits, meets its constraints, or ran on the approved configuration.
@@ -70,7 +73,7 @@ The offline `batch-job-plan` also accepts `--infrastructure-binding FILE --infra
 
 ## Contract and trust limits
 
-The executable validators in [infrastructure.py](src/dimaggi_receiver/infrastructure.py) define exact fields and refuse extensions. [Examples](examples/infrastructure/) show complete documents. All arrays are bounded at 1,024 items, JSON inputs at 4 MiB and the planner at 4,096 workload/pool comparisons. Numbers are nonnegative exact integers bounded by `2**53 - 1`; byte and bandwidth fields use bytes and bytes/second. The [quantity adapter](src/dimaggi_receiver/quantities.py) distinguishes GB, GiB, Gb/s and GB/s and refuses ambiguous `gbps`, floats and fractional output units.
+The executable validators in [infrastructure.py](src/dimaggi_receiver/infrastructure.py) define exact fields and refuse extensions. [Examples](examples/infrastructure/) show complete documents. All arrays are bounded at 1,024 items, JSON inputs at 4 MiB and the planner at 4,096 workload/pool comparisons. Known numbers are nonnegative exact integers bounded by `2**53 - 1`; headroom and latency/restore measurements may be explicitly unknown. Positive requirements cannot consume unknown headroom. byte and bandwidth fields use bytes and bytes/second. The [quantity adapter](src/dimaggi_receiver/quantities.py) distinguishes GB, GiB, Gb/s and GB/s and refuses ambiguous `gbps`, floats and fractional output units.
 
 Workload resources are requested reservations. A zero request does not claim zero physical consumption or prove that a dimension is irrelevant. Providers must supply justified demand envelopes and all shared bottlenecks. Headroom must already account for existing reservations, physical parent limits and observation races. This planner neither discovers those facts nor makes a scheduler reservation. Distinct target IDs cannot by themselves prove disjoint physical capacity.
 
@@ -80,7 +83,7 @@ Reconciliation consumes normalized hardware observations and independently suppl
 
 ## Research applied, without overstating coverage
 
-[Source application register](docs/infrastructure/source-application.json) retains URLs and archive hashes for 53 official TPU/NVIDIA pages. It maps the research into compatibility, lifecycle, units, attribution and failure controls. Raw vendor documents, private lab material and teammate packets are not copied into the public repository.
+[Source application register](docs/infrastructure/source-application.json) retains URLs and archive hashes for 53 official TPU/NVIDIA pages and seven captured Google Skills course exports. It maps the research into compatibility, lifecycle, units, attribution and failure controls. Raw vendor documents, private lab material and teammate packets are not copied into the public repository.
 
 Hardware profiles from the research snapshot are not automatically promoted. Conflicting GB/GiB labels, chip versus logical-device counts, orchestration limits, driver lifecycle and shared operator dependency versions require profile-specific resolution. TPUv10 remains unknown. Catalog pages are not complete Google Skills lessons, and the archive does not establish complete course-video transcript coverage.
 
@@ -90,7 +93,7 @@ Editorial review: passed — commands, implemented boundaries, source coverage a
 
 ## Combined acceptance automation
 
-With receiver 0.1.7 and pytest installed, Go dependencies cached, a reviewed TENWA checkout and the existing verified source export:
+With receiver 0.1.8 and pytest installed, Go dependencies cached, a reviewed TENWA checkout and the existing verified source export:
 
 ```sh
 python integration/receiver/tools/verify_interoperability.py \

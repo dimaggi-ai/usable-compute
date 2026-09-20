@@ -1,0 +1,7 @@
+{
+  "evidence_class": "synthetic",
+  "observed_at": "2026-09-20T12:00:00Z",
+  "source_epoch": "epoch-1",
+  "source_id": "synthetic-collector",
+  "target_id": "synthetic-cluster"
+}

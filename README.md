@@ -10,7 +10,9 @@ where it fits, which changes are authorized, and what actually happened.
 The installable [infrastructure receiver](integration/receiver/INFRASTRUCTURE.md)
 combines versioned capabilities, exact software compatibility, shared resource
 budgets and observed-state reconciliation. Its CPU evidence connects to TENWA's
-signed execution configuration. Training, inference and agentic workloads share
+signed execution configuration. [Provider telemetry and source review](integration/receiver/OPERATIONS.md)
+now join the same assessment, with persistent drift findings and replayable failure
+campaigns. Training, inference and agentic workloads share
 the planning contract; live TPU/GPU execution remains a separate validation step.
 See the [delivery assessment](integration/receiver/DELIVERY-ASSESSMENT.md) for the
 boundary between implemented software, local lab evidence and remaining proof.

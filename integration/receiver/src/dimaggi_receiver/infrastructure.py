@@ -71,10 +71,11 @@ def array(v, label, nonempty=True):
     return v
 
 
-def resources(v):
+def resources(v, allow_unknown=False):
     obj(v, RESOURCES, "resources")
     for k, x in v.items():
-        integer(x, k)
+        if x is not None or not allow_unknown:
+            integer(x, k)
 
 
 def strings(v, label):
@@ -252,10 +253,11 @@ def plan(registry, request, expected_digest, as_of):
             raise ValueError("mixed evidence classes")
         sha(p["evidence_digest"])
         stamp(p["observed_at"])
-        resources(p["headroom"])
+        resources(p["headroom"], allow_unknown=True)
         stack(p["stack"])
-        integer(p["latency_p99_us"], "latency_p99_us")
-        integer(p["checkpoint_restore_seconds"], "checkpoint_restore_seconds")
+        for metric in ("latency_p99_us", "checkpoint_restore_seconds"):
+            if p[metric] is not None:
+                integer(p[metric], metric)
         if type(p["healthy"]) is not bool:
             raise ValueError("healthy must be boolean")
         for bid in array(p["budget_ids"], "budget_ids", nonempty=False):
@@ -309,7 +311,8 @@ def plan(registry, request, expected_digest, as_of):
             "max_latency_p99_us",
             "max_restore_seconds",
         ):
-            integer(w[k], k, 1)
+            if w[k] is not None or k == "memory_bytes_per_device":
+                integer(w[k], k, 1)
         for k in ("precision", "isolation"):
             text(w[k], k)
         candidates, rejected = [], []
@@ -361,9 +364,20 @@ def plan(registry, request, expected_digest, as_of):
                 (p["healthy"], "unhealthy"),
                 (p["isolation"] == w["isolation"], "isolation_mismatch"),
                 (p["topology"] in w["allowed_topologies"], "topology_not_allowed"),
-                (p["latency_p99_us"] <= w["max_latency_p99_us"], "latency_slo"),
                 (
-                    p["checkpoint_restore_seconds"] <= w["max_restore_seconds"],
+                    w["max_latency_p99_us"] is None
+                    or (
+                        p["latency_p99_us"] is not None
+                        and p["latency_p99_us"] <= w["max_latency_p99_us"]
+                    ),
+                    "latency_slo",
+                ),
+                (
+                    w["max_restore_seconds"] is None
+                    or (
+                        p["checkpoint_restore_seconds"] is not None
+                        and p["checkpoint_restore_seconds"] <= w["max_restore_seconds"]
+                    ),
                     "recovery_slo",
                 ),
             )
@@ -371,7 +385,11 @@ def plan(registry, request, expected_digest, as_of):
             reasons.extend(
                 "insufficient_" + k
                 for k in RESOURCES
-                if w["resources"][k] > remaining[pool_id][k]
+                if (remaining[pool_id][k] is None and w["resources"][k] > 0)
+                or (
+                    remaining[pool_id][k] is not None
+                    and w["resources"][k] > remaining[pool_id][k]
+                )
             )
             for bid in p["budget_ids"]:
                 if bid in stale_budgets:
@@ -397,7 +415,8 @@ def plan(registry, request, expected_digest, as_of):
         pool_id = min(candidates)[2]
         p = pools[pool_id]
         for k in RESOURCES:
-            remaining[pool_id][k] -= w["resources"][k]
+            if remaining[pool_id][k] is not None:
+                remaining[pool_id][k] -= w["resources"][k]
         for bid in p["budget_ids"]:
             for k in budget_remaining[bid]:
                 budget_remaining[bid][k] -= w["resources"][k]
@@ -412,6 +431,14 @@ def plan(registry, request, expected_digest, as_of):
                 epoch=p["epoch"],
                 resources=w["resources"],
                 pool_evidence_digest=p["evidence_digest"],
+                unchecked_constraints=(
+                    [k for k in RESOURCES if w["resources"][k] == 0]
+                    + [
+                        k
+                        for k in ("max_latency_p99_us", "max_restore_seconds")
+                        if w[k] is None
+                    ]
+                ),
             )
         )
     result = dict(

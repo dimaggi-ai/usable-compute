@@ -17,6 +17,9 @@
       },
       "source_id": "synthetic-collector",
       "target_id": "synthetic-cluster",
+      "unchecked_constraints": [
+        "network_bytes_per_second"
+      ],
       "workload_id": "payload-1"
     }
   ],
@@ -30,7 +33,7 @@
   "execution_authorized": false,
   "input_digest": "sha256:9b9688e9e60bc8986f16ef560235112e4931a3fd5a68bbc52f323d630b54bc82",
   "mutation_request": null,
-  "plan_digest": "sha256:e827b577bcbe676e92e6e1674db29e9e7e0caabaa3e0c0ba2d3b974d784293da",
+  "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",
   "refusals": [],
   "registry_digest": "sha256:061a2e8ec6a40bc82c8e703c8f2e32e456d57fcdd3043905722ac46326a4fa51",
   "remaining": {

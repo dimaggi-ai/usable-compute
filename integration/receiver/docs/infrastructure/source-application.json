@@ -424,6 +424,62 @@
       "observed_date": "2026-09-20",
       "application": "compatibility_tuple_and_release_review",
       "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1403",
+      "url": "https://www.skills.google/course_templates/1403",
+      "archive_sha256": "f79b745708408bb29a4ea396b96e8e8fb3453c4eb2f27d34bb61e26e5a714c73",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1404",
+      "url": "https://www.skills.google/course_templates/1404",
+      "archive_sha256": "b63fa21783b7f87394a5c587a5e7296fae5b2e8f62cd79b6cfb56093fb50632b",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1405",
+      "url": "https://www.skills.google/course_templates/1405",
+      "archive_sha256": "b824d6ab71fbb77b0ea83c51fc2e2a53af859938a38952d19b464fb3ed460acc",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1552",
+      "url": "https://www.skills.google/course_templates/1552",
+      "archive_sha256": "5db5aca34b6ff37c83f6e178e6230a56eb49815ade789d3782e41aa0e06936e5",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1553",
+      "url": "https://www.skills.google/course_templates/1553",
+      "archive_sha256": "4e69619858dd30015b12ebfe1d012a8fb6930f0354e627c1600c76a46985f187",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1554",
+      "url": "https://www.skills.google/course_templates/1554",
+      "archive_sha256": "f5a78d9cc7f0b46a9de89abe7d33d5fcba0a61222fc3ba3925d328623a9b521b",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
+    },
+    {
+      "id": "skills-content-1877",
+      "url": "https://www.skills.google/course_templates/1877",
+      "archive_sha256": "ac00e32987fcbeef4ceeb94245bd5d058249d4e57f4c5608ec71849139b80d13",
+      "observed_date": "2026-09-20",
+      "application": "architecture_and_workload_contract_design;publisher_content_captured",
+      "runtime_activation": "requires_separate_validated_profile"
     }
   ],
   "scope": "Archived public official pages; not authenticated course lessons or hardware validation.",

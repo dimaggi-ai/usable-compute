@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dimaggi-offline-receiver"
-version = "0.1.7"
+version = "0.1.8"
 description = "Source-bound infrastructure planning, compatibility and evidence reconciliation"
 requires-python = ">=3.11"
 dependencies = ["numpy==2.2.6", "PyYAML==6.0.2", "jsonschema==4.26.0"]

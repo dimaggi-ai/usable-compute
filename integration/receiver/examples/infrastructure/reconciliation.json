@@ -5,9 +5,9 @@
   "execution_authorized": false,
   "expected_objects_digest": "sha256:0228d989b691f76c28f3c16743f41830fd2e9f0be97e162d8796b1de1c2df308",
   "mutation_request": null,
-  "observations_digest": "sha256:1cc8d2eb7859bcb51e8a980e0ef9dcfb81b5ec2041db19c117c43e6ccadea9de",
-  "plan_digest": "sha256:e827b577bcbe676e92e6e1674db29e9e7e0caabaa3e0c0ba2d3b974d784293da",
-  "receipt_digest": "sha256:bb6ebadb93b6cafd5ba8c760e83a8d3311742211ae53dafb6312667bf354c852",
+  "observations_digest": "sha256:311cf233680a22234fcce5391e259cc3d381e300dbd6e4095936067f5b0e668b",
+  "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",
+  "receipt_digest": "sha256:eb82cc970fa54b13bfc2e23ee58ca28fa32989919e84cfbf3fd771467ccffb9c",
   "schema": "dimaggi-infrastructure-reconciliation/v1",
   "status": "consistent"
 }

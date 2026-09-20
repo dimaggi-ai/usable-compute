@@ -1,4 +1,4 @@
-"""Offline receiver command line. JSON stdout; no scheduler or network client."""
+"""Receiver CLI. JSON stdout; explicit read-only collection commands use network."""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +11,7 @@ from .bindings import policy_input
 from .jsonio import dumps, loads, read_file, read_stream
 from .report import build_report
 from .sources import verify_bundle
-from . import infrastructure_cli
+from . import infrastructure_cli, operations_cli
 from .observation_cli import COMMANDS, add_commands, run as run_observation
 
 
@@ -30,9 +30,12 @@ def main(argv=None):
     sub.add_argument("--request-id", required=True)
     add_commands(commands)
     infrastructure_cli.add_commands(commands)
+    operations_cli.add_commands(commands)
     args = parser.parse_args(argv)
     try:
-        if args.command in infrastructure_cli.COMMANDS:
+        if args.command in operations_cli.COMMANDS:
+            result = operations_cli.run(args)
+        elif args.command in infrastructure_cli.COMMANDS:
             result = infrastructure_cli.run(args)
         elif args.command in COMMANDS:
             result = run_observation(args)

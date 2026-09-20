@@ -1,5 +1,6 @@
-> **Infrastructure integration:** receiver 0.1.7 adds versioned capability planning,
-> shared resource budgets, CPU execution evidence and infrastructure reconciliation.
+> **Infrastructure integration:** receiver 0.1.8 adds provider telemetry, joined admission,
+> persistent source review and reproducible local transport-failure campaigns.
+> See [operations and replay commands](OPERATIONS.md).
 > Start with [the integrated workflow](INFRASTRUCTURE.md) and [delivery assessment](DELIVERY-ASSESSMENT.md).
 
 # First-slice offline receiver
@@ -8,8 +9,9 @@ This installable application calls Maggie's existing domain implementations and
 maps their actual results into `dimaggi-receiver-report/v1`. The selected request
 is `job-0`; the cohort ledger is context. Every report has
 `execution_readiness: incomplete`, `execution_authorized: false` and
-`mutation_request: null`. It has no scheduler client, credential path or dispatch
-function. Model, future CPU-executor and future operator proof remain separate.
+`mutation_request: null`. The model/report commands remain offline and do not dispatch. Explicit telemetry
+collection commands use read-only provider APIs; governed CPU dispatch stays in
+TENWA. Model, workload observation and operator proof remain separate.
 
 The receiver lives in the existing research repository. It adds transport,
 source binding, report mapping and observation projection; physical models,

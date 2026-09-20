@@ -37,6 +37,6 @@
       "workload_id": "payload-1"
     }
   ],
-  "plan_digest": "sha256:e827b577bcbe676e92e6e1674db29e9e7e0caabaa3e0c0ba2d3b974d784293da",
+  "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",
   "schema": "dimaggi-infrastructure-observations/v1"
 }

@@ -1,0 +1,85 @@
+{
+  "assessment_digest": "sha256:c659e1bd1c04614c88ecddf7164dcca6a33a10097bc0dc353652981bcd4720cb",
+  "evidence_digest": "sha256:ec91aa41e25a243fdf42af558d3e7c8b74da2b269560bf626cc2f036590b3004",
+  "execution_authorized": false,
+  "memory_screens": [
+    {
+      "execution_authorized": false,
+      "inventory_digest": "sha256:e29bb57e0ffe602c4d1dc34db783e6aa18b3805ec5551e1beb542787470def83",
+      "mutation_request": null,
+      "pool_id": "pool-1",
+      "reasons": [],
+      "required_bytes_per_device": 67108864,
+      "schema": "dimaggi-telemetry-memory-screen/v1",
+      "snapshot_digest": "sha256:b404d0a61503ac1ff21481dd4a84bf717167de3bc95e33c769aba763b43c7d93",
+      "status": "pass",
+      "unperformed": [
+        "scheduler_reservation",
+        "full_stack_compatibility",
+        "topology",
+        "isolation",
+        "power",
+        "performance"
+      ]
+    }
+  ],
+  "mutation_request": null,
+  "plan": {
+    "allocations": [
+      {
+        "epoch": "epoch-1",
+        "namespace_uid": "synthetic-ns-uid",
+        "pool_evidence_digest": "sha256:fb8ced175a9b03510e15db896d2574886bd35061654f306ce4bc737fabd1da40",
+        "pool_id": "pool-1",
+        "profile_id": "synthetic.nvidia.test-v1",
+        "resources": {
+          "cpu_millicores": 500,
+          "devices": 1,
+          "host_memory_bytes": 67108864,
+          "network_bytes_per_second": 0,
+          "power_watts": 20,
+          "scratch_bytes": 16777216,
+          "storage_bytes_per_second": 1000
+        },
+        "source_id": "synthetic-collector",
+        "target_id": "synthetic-cluster",
+        "unchecked_constraints": [
+          "network_bytes_per_second"
+        ],
+        "workload_id": "payload-1"
+      }
+    ],
+    "as_of": "2026-09-20T12:00:01Z",
+    "budget_remaining": {
+      "site-feed": {
+        "power_watts": 180
+      }
+    },
+    "evidence_class": "synthetic",
+    "execution_authorized": false,
+    "input_digest": "sha256:45d30baf8cff010c7a1a2809f25550dae177b776f5182a055e32d08222a596f0",
+    "mutation_request": null,
+    "plan_digest": "sha256:2769d7fa1ab4147f91cedaa050aad4562886ba30a5b0428b0501f1d2b2707921",
+    "refusals": [],
+    "registry_digest": "sha256:f7f1a85c2eae56a075863247d65efd76364782c428e4a45393dcef072b969ce6",
+    "remaining": {
+      "pool-1": {
+        "cpu_millicores": 500,
+        "devices": 0,
+        "host_memory_bytes": 201326592,
+        "network_bytes_per_second": 1000000000,
+        "power_watts": 180,
+        "scratch_bytes": 50331648,
+        "storage_bytes_per_second": 99999000
+      }
+    },
+    "request_id": "infra-cpu-1",
+    "schema": "dimaggi-infrastructure-plan/v1",
+    "status": "compatible"
+  },
+  "refusals": [],
+  "schema": "dimaggi-infrastructure-assessment/v1",
+  "source_queue_digest": "sha256:417b65d9947e60b027190b2e48f0b9458b723507294f054fde11c689abc02ec7",
+  "status": "compatible",
+  "unassessed_pool_ids": []
+}

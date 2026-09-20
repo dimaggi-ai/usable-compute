@@ -131,7 +131,7 @@ def test_fault_hooks(case, reason):
 
 
 @pytest.mark.parametrize(
-    "value", [True, -1, 1.5, "100", None, float("nan"), float("inf"), 2**53]
+    "value", [True, -1, 1.5, "100", float("nan"), float("inf"), 2**53]
 )
 @pytest.mark.parametrize("key", RESOURCES)
 def test_numeric_boundaries(key, value):
@@ -488,4 +488,25 @@ def test_running_does_not_satisfy_requested_completion():
             "status"
         ]
         == "consistent"
+    )
+
+
+def test_unknown_metrics_are_not_zero_or_false_slo_proof():
+    r, q = fixture.fixtures()
+    p = q["pools"][0]
+    w = q["workloads"][0]
+    p["headroom"]["power_watts"] = None
+    assert run(r, q)["status"] == "refused"
+    w["resources"]["power_watts"] = 0
+    p["latency_p99_us"] = None
+    assert run(r, q)["status"] == "refused"
+    w["max_latency_p99_us"] = None
+    p["checkpoint_restore_seconds"] = None
+    assert run(r, q)["status"] == "refused"
+    w["max_restore_seconds"] = None
+    result = run(r, q)
+    assert result["status"] == "compatible"
+    assert result["remaining"]["pool-1"]["power_watts"] is None
+    assert {"power_watts", "max_latency_p99_us", "max_restore_seconds"} <= set(
+        result["allocations"][0]["unchecked_constraints"]
     )
