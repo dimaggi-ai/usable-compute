@@ -155,3 +155,5 @@ Editorial review: passed — configuration boundaries, source-authentication sco
 GET counts, runtime matching, refusal semantics, parser limits, deadline caveats
 and journal claims checked against the implementation. No live-cluster or
 operator proof is claimed.
+
+For a remote lab, see [Mac collector connection](KUBERNETES-LAB-CONNECTION.md) for the explicit SSH route, unchanged TLS checks and current platform/admission limits.
