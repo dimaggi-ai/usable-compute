@@ -1,0 +1,85 @@
+{
+  "assessment_digest": "sha256:34e00e1a3e5e2c9965b424d394a3cc38d615bf5ba65429df3b06d2c3d0c4d80f",
+  "evidence_digest": "sha256:99c51e69141cc4832ab488db1490b8c0ec53ce8162d8161e3717a6fa6392de10",
+  "execution_authorized": false,
+  "memory_screens": [
+    {
+      "execution_authorized": false,
+      "inventory_digest": "sha256:637958ffa7c92752966d32ccf602a5123e91987332a2657f58e4d772ec7bc6fb",
+      "mutation_request": null,
+      "pool_id": "pool-1",
+      "reasons": [],
+      "required_bytes_per_device": 67108864,
+      "schema": "dimaggi-telemetry-memory-screen/v1",
+      "snapshot_digest": "sha256:9dbe0eaef637d0f1f6dee8f77959d0af78eb5e08ee14df85dacac424bedaa580",
+      "status": "pass",
+      "unperformed": [
+        "scheduler_reservation",
+        "full_stack_compatibility",
+        "topology",
+        "isolation",
+        "power",
+        "performance"
+      ]
+    }
+  ],
+  "mutation_request": null,
+  "plan": {
+    "allocations": [
+      {
+        "epoch": "epoch-1",
+        "namespace_uid": "synthetic-ns-uid",
+        "pool_evidence_digest": "sha256:fb8ced175a9b03510e15db896d2574886bd35061654f306ce4bc737fabd1da40",
+        "pool_id": "pool-1",
+        "profile_id": "synthetic.google.test-v1",
+        "resources": {
+          "cpu_millicores": 500,
+          "devices": 1,
+          "host_memory_bytes": 67108864,
+          "network_bytes_per_second": 0,
+          "power_watts": 20,
+          "scratch_bytes": 16777216,
+          "storage_bytes_per_second": 1000
+        },
+        "source_id": "synthetic-collector",
+        "target_id": "synthetic-cluster",
+        "unchecked_constraints": [
+          "network_bytes_per_second"
+        ],
+        "workload_id": "payload-1"
+      }
+    ],
+    "as_of": "2026-09-20T12:00:01Z",
+    "budget_remaining": {
+      "site-feed": {
+        "power_watts": 180
+      }
+    },
+    "evidence_class": "synthetic",
+    "execution_authorized": false,
+    "input_digest": "sha256:828a67b3efa3edae0d55e2bf16fe3098d2ae0c6469d77a166778a623b1455a82",
+    "mutation_request": null,
+    "plan_digest": "sha256:8d1e3dd600805ee9c710a4dcfbd344d0c0e3604b9a9c6c55b946c27dff704b5d",
+    "refusals": [],
+    "registry_digest": "sha256:89aba7a36ce24f803c8f9a0481d13d28233dc03cfdbe01020d54510b2c29fdd9",
+    "remaining": {
+      "pool-1": {
+        "cpu_millicores": 500,
+        "devices": 0,
+        "host_memory_bytes": 201326592,
+        "network_bytes_per_second": 1000000000,
+        "power_watts": 180,
+        "scratch_bytes": 50331648,
+        "storage_bytes_per_second": 99999000
+      }
+    },
+    "request_id": "infra-cpu-1",
+    "schema": "dimaggi-infrastructure-plan/v1",
+    "status": "compatible"
+  },
+  "refusals": [],
+  "schema": "dimaggi-infrastructure-assessment/v1",
+  "source_queue_digest": "sha256:e42c64f8c0f5b48c7479eb6041469ddd117b5837cc02a31b2a243f5944e60383",
+  "status": "compatible",
+  "unassessed_pool_ids": []
+}

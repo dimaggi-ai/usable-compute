@@ -1,0 +1,11 @@
+{
+  "schema": "dimaggi-source-watch-config/v1",
+  "sources": [
+    {"id":"tpu-releases","url":"https://docs.cloud.google.com/tpu/docs/release-notes","profile_ids":["google.tpu.v4","google.tpu.v5e","google.tpu.v5p","google.tpu.v6e","google.tpu.v7x"],"max_bytes":4194304},
+    {"id":"tpu-runtimes","url":"https://docs.cloud.google.com/tpu/docs/runtimes","profile_ids":["google.tpu.v4","google.tpu.v5e","google.tpu.v5p","google.tpu.v6e","google.tpu.v7x"],"max_bytes":2097152},
+    {"id":"tpu-telemetry","url":"https://docs.cloud.google.com/tpu/docs/monitor-tpu","profile_ids":["google.tpu.v4","google.tpu.v5e","google.tpu.v5p","google.tpu.v6e","google.tpu.v7x"],"max_bytes":2097152},
+    {"id":"nvidia-smi","url":"https://docs.nvidia.com/deploy/nvidia-smi/","profile_ids":["nvidia.telemetry.smi-v1"],"max_bytes":2097152},
+    {"id":"gpu-operator","url":"https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/release-notes.html","profile_ids":["nvidia.operator.review"],"max_bytes":2097152},
+    {"id":"network-operator","url":"https://docs.nvidia.com/networking/display/kubernetes2670/release-notes.html","profile_ids":["nvidia.network.review"],"max_bytes":2097152}
+  ]
+}

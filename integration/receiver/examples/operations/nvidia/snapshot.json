@@ -1,0 +1,36 @@
+{
+  "devices": [
+    {
+      "device_unit": "gpu",
+      "driver": "580.1",
+      "id": "GPU-01234567-abcd",
+      "memory_free_bytes": 805306368,
+      "memory_total_bytes": 1073741824,
+      "memory_used_bytes": 268435456,
+      "name": "NVIDIA Test GPU",
+      "observed_at": "2026-09-20T12:00:00Z",
+      "partition": "whole",
+      "power_limit_milliwatts": 100000,
+      "power_milliwatts": 20125
+    }
+  ],
+  "execution_authorized": false,
+  "metadata": {
+    "evidence_class": "synthetic",
+    "observed_at": "2026-09-20T12:00:00Z",
+    "source_epoch": "epoch-1",
+    "source_id": "synthetic-collector",
+    "target_id": "synthetic-cluster"
+  },
+  "mutation_request": null,
+  "provider": "nvidia",
+  "raw_digest": "sha256:f8df59e7c0077cefcdf145b1669523fbd7a2aa1606e3c1e7d32afea2d67aaf40",
+  "schema": "dimaggi-telemetry/v1",
+  "snapshot_digest": "sha256:b404d0a61503ac1ff21481dd4a84bf717167de3bc95e33c769aba763b43c7d93",
+  "unknowns": [
+    "health",
+    "runtime_stack",
+    "scheduler_reservations",
+    "topology"
+  ]
+}

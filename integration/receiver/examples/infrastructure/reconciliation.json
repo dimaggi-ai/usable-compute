@@ -1,0 +1,13 @@
+{
+  "as_of": "2026-09-20T12:00:01Z",
+  "conditions": [],
+  "evidence_class": "synthetic",
+  "execution_authorized": false,
+  "expected_objects_digest": "sha256:0228d989b691f76c28f3c16743f41830fd2e9f0be97e162d8796b1de1c2df308",
+  "mutation_request": null,
+  "observations_digest": "sha256:311cf233680a22234fcce5391e259cc3d381e300dbd6e4095936067f5b0e668b",
+  "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",
+  "receipt_digest": "sha256:eb82cc970fa54b13bfc2e23ee58ca28fa32989919e84cfbf3fd771467ccffb9c",
+  "schema": "dimaggi-infrastructure-reconciliation/v1",
+  "status": "consistent"
+}

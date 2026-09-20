@@ -1,0 +1,19 @@
+{
+  "architecture": "arm64",
+  "cluster_id": "synthetic-cluster",
+  "cpu_millicores": 500,
+  "ephemeral_storage_bytes": 16777216,
+  "evidence_class": "synthetic",
+  "execution_authorized": false,
+  "input_digest": "sha256:9b9688e9e60bc8986f16ef560235112e4931a3fd5a68bbc52f323d630b54bc82",
+  "memory_bytes": 67108864,
+  "namespace_uid": "synthetic-ns-uid",
+  "permission": "not_granted",
+  "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",
+  "registry_digest": "sha256:061a2e8ec6a40bc82c8e703c8f2e32e456d57fcdd3043905722ac46326a4fa51",
+  "request_id": "infra-cpu-1",
+  "schema": "dimaggi-infrastructure-cpu-binding/v1",
+  "valid_from": "2026-09-20T12:00:01Z",
+  "valid_until": "2026-09-20T12:05:00Z",
+  "workload_id": "payload-1"
+}

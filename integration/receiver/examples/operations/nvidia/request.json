@@ -1,0 +1,90 @@
+{
+  "budgets": [
+    {
+      "epoch": "epoch-1",
+      "evidence_class": "synthetic",
+      "evidence_digest": "sha256:c485a30ca3d26c150daa203260c4f6ea74866384d3c7bd1a678a729c710bdaf0",
+      "headroom": {
+        "power_watts": 200
+      },
+      "id": "site-feed",
+      "observed_at": "2026-09-20T12:00:00Z",
+      "source_id": "synthetic-collector"
+    }
+  ],
+  "evidence_class": "synthetic",
+  "freshness_seconds": 300,
+  "pools": [
+    {
+      "budget_ids": [
+        "site-feed"
+      ],
+      "checkpoint_restore_seconds": 2,
+      "device_unit": "gpu",
+      "epoch": "epoch-1",
+      "evidence_class": "synthetic",
+      "evidence_digest": "sha256:fb8ced175a9b03510e15db896d2574886bd35061654f306ce4bc737fabd1da40",
+      "headroom": {
+        "cpu_millicores": 1000,
+        "devices": 1,
+        "host_memory_bytes": 268435456,
+        "network_bytes_per_second": 1000000000,
+        "power_watts": 200,
+        "scratch_bytes": 67108864,
+        "storage_bytes_per_second": 100000000
+      },
+      "healthy": true,
+      "id": "pool-1",
+      "isolation": "dedicated-namespace",
+      "latency_p99_us": 100,
+      "namespace_uid": "synthetic-ns-uid",
+      "observed_at": "2026-09-20T12:00:00Z",
+      "partition": "whole",
+      "profile_id": "synthetic.nvidia.test-v1",
+      "source_id": "synthetic-collector",
+      "stack": {
+        "architecture": "arm64",
+        "collectives": "none",
+        "device_plugin": "none",
+        "driver": "580.1",
+        "framework": "cpu-payload-1",
+        "network_plugin": "test-cni-1",
+        "orchestrator": "kubernetes-1.35.0",
+        "os": "linux",
+        "runtime": "test-runtime-1"
+      },
+      "target_id": "synthetic-cluster",
+      "topology": "single-host"
+    }
+  ],
+  "request_id": "infra-cpu-1",
+  "schema": "dimaggi-infrastructure/v1",
+  "workloads": [
+    {
+      "allow_fallback": false,
+      "allowed_profiles": [
+        "synthetic.nvidia.test-v1"
+      ],
+      "allowed_topologies": [
+        "single-host"
+      ],
+      "archetype": "inference",
+      "desired_state": "succeeded",
+      "id": "payload-1",
+      "isolation": "dedicated-namespace",
+      "max_latency_p99_us": 1000,
+      "max_restore_seconds": 10,
+      "memory_bytes_per_device": 67108864,
+      "precision": "int64",
+      "resources": {
+        "cpu_millicores": 500,
+        "devices": 1,
+        "host_memory_bytes": 67108864,
+        "network_bytes_per_second": 0,
+        "power_watts": 20,
+        "scratch_bytes": 16777216,
+        "storage_bytes_per_second": 1000
+      }
+    }
+  ]
+}

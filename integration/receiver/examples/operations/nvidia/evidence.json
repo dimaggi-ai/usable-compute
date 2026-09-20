@@ -1,0 +1,60 @@
+{
+  "schema": "dimaggi-assessment-evidence/v1",
+  "source_queue": {
+    "activation_authorized": false,
+    "config_digest": "sha256:534e55711de7db191f31502a0cbaf780523d883f189c9ead7142e45692aa60f0",
+    "execution_authorized": false,
+    "findings": [],
+    "observed_at": "2026-09-20T12:00:01Z",
+    "profile_ids": [
+      "synthetic.nvidia.test-v1"
+    ],
+    "queue_digest": "sha256:417b65d9947e60b027190b2e48f0b9458b723507294f054fde11c689abc02ec7",
+    "schema": "dimaggi-source-review-queue/v1"
+  },
+  "telemetry": [
+    {
+      "device_mapping": {
+        "GPU-01234567-abcd": "fixture-physical-0"
+      },
+      "pool_id": "pool-1",
+      "snapshot": {
+        "devices": [
+          {
+            "device_unit": "gpu",
+            "driver": "580.1",
+            "id": "GPU-01234567-abcd",
+            "memory_free_bytes": 805306368,
+            "memory_total_bytes": 1073741824,
+            "memory_used_bytes": 268435456,
+            "name": "NVIDIA Test GPU",
+            "observed_at": "2026-09-20T12:00:00Z",
+            "partition": "whole",
+            "power_limit_milliwatts": 100000,
+            "power_milliwatts": 20125
+          }
+        ],
+        "execution_authorized": false,
+        "metadata": {
+          "evidence_class": "synthetic",
+          "observed_at": "2026-09-20T12:00:00Z",
+          "source_epoch": "epoch-1",
+          "source_id": "synthetic-collector",
+          "target_id": "synthetic-cluster"
+        },
+        "mutation_request": null,
+        "provider": "nvidia",
+        "raw_digest": "sha256:f8df59e7c0077cefcdf145b1669523fbd7a2aa1606e3c1e7d32afea2d67aaf40",
+        "schema": "dimaggi-telemetry/v1",
+        "snapshot_digest": "sha256:b404d0a61503ac1ff21481dd4a84bf717167de3bc95e33c769aba763b43c7d93",
+        "unknowns": [
+          "health",
+          "runtime_stack",
+          "scheduler_reservations",
+          "topology"
+        ]
+      },
+      "snapshot_digest": "sha256:b404d0a61503ac1ff21481dd4a84bf717167de3bc95e33c769aba763b43c7d93"
+    }
+  ]
+}

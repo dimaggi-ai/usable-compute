@@ -1,0 +1,69 @@
+name: Installed offline receiver
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: receiver-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  receiver:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and install wheel
+        run: |
+          python -m pip wheel --wheel-dir "$RUNNER_TEMP/wheels" ./integration/receiver
+          python -m pip install --no-index --find-links "$RUNNER_TEMP/wheels" dimaggi-offline-receiver==0.1.8
+          python -m pip install pytest==8.3.4
+      - name: Export exact public source objects
+        run: |
+          python - <<'PY'
+          import json, os, re, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0, 'integration/receiver/tools')
+          from export_sources import export
+          names = ('cooling-pue-ladder', 'network-vs-more-gpus', 'reliability-economics',
+                   'research', 'scheduler-vs-more-gpus', 'slice-packer-torus', 'span-contract', 'usable-compute')
+          lock = json.loads(Path('integration/receiver/src/dimaggi_receiver/sources.lock.json').read_text())
+          if set(lock['repositories']) != set(names):
+              raise ValueError('source set changed; review CI source scope')
+          root = Path(os.environ['RUNNER_TEMP']) / 'receiver-inputs'
+          root.mkdir()
+          sources = {}
+          for name in names:
+              commit = lock['repositories'][name]['commit']
+              if not re.fullmatch('[0-9a-f]{40}', commit):
+                  raise ValueError('exact source commit required')
+              target = root / name
+              subprocess.run(['git', 'init', '-q', str(target)], check=True, timeout=30)
+              remote = 'usable-compute' if name == 'research' else name
+              subprocess.run(['git', '-C', str(target), 'fetch', '--depth=1',
+                              'https://github.com/dimaggi-ai/' + remote + '.git', commit],
+                             check=True, timeout=90)
+              sources[name] = str(target)
+          export(lock, sources, root / 'export')
+          PY
+      - name: Installed receiver and source-bound domain tests
+        env:
+          DIMAGGI_TEST_SOURCES: ${{ runner.temp }}/receiver-inputs/export
+        run: |
+          python -m pytest integration/receiver/tests -q \
+            --ignore=integration/receiver/tests/test_infrastructure_roundtrip.py \
+            --ignore=integration/receiver/tests/test_policy_roundtrip.py \
+            --ignore=integration/receiver/tests/test_journal_roundtrip.py \
+            --ignore=integration/receiver/tests/test_collection_roundtrip.py \
+            --junitxml "$RUNNER_TEMP/receiver-tests.xml"
+          python - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          from pathlib import Path
+          root = ET.parse(Path(os.environ['RUNNER_TEMP']) / 'receiver-tests.xml').getroot()
+          if any(int(s.get('skipped', 0)) for s in root.iter('testsuite')):
+              raise RuntimeError('unexpected skipped receiver acceptance test')
+          PY

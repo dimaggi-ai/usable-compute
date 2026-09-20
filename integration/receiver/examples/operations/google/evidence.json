@@ -1,0 +1,58 @@
+{
+  "schema": "dimaggi-assessment-evidence/v1",
+  "source_queue": {
+    "activation_authorized": false,
+    "config_digest": "sha256:a27dbd8d4a15b962589472ac6fe7eea45c3cd14ecfac02b476118e1d6017f524",
+    "execution_authorized": false,
+    "findings": [],
+    "observed_at": "2026-09-20T12:00:01Z",
+    "profile_ids": [
+      "synthetic.google.test-v1"
+    ],
+    "queue_digest": "sha256:e42c64f8c0f5b48c7479eb6041469ddd117b5837cc02a31b2a243f5944e60383",
+    "schema": "dimaggi-source-review-queue/v1"
+  },
+  "telemetry": [
+    {
+      "device_mapping": {
+        "0": "fixture-physical-0"
+      },
+      "pool_id": "pool-1",
+      "snapshot": {
+        "devices": [
+          {
+            "device_unit": "runtime_device",
+            "id": "0",
+            "memory_free_bytes": 805306368,
+            "memory_total_bytes": 1073741824,
+            "memory_used_bytes": 268435456,
+            "observed_at": "2026-09-20T12:00:00Z",
+            "partition": "unresolved"
+          }
+        ],
+        "execution_authorized": false,
+        "metadata": {
+          "evidence_class": "synthetic",
+          "observed_at": "2026-09-20T12:00:00Z",
+          "source_epoch": "epoch-1",
+          "source_id": "synthetic-collector",
+          "target_id": "synthetic-cluster"
+        },
+        "mutation_request": null,
+        "provider": "google",
+        "raw_digest": "sha256:130bfbdff456510fd0ce7bfa647d33c50c1a13457c8b2a8ab9c89b961fb8f069",
+        "schema": "dimaggi-telemetry/v1",
+        "snapshot_digest": "sha256:9dbe0eaef637d0f1f6dee8f77959d0af78eb5e08ee14df85dacac424bedaa580",
+        "unknowns": [
+          "health",
+          "physical_chip_mapping",
+          "power",
+          "runtime_stack",
+          "scheduler_reservations",
+          "topology"
+        ]
+      },
+      "snapshot_digest": "sha256:9dbe0eaef637d0f1f6dee8f77959d0af78eb5e08ee14df85dacac424bedaa580"
+    }
+  ]
+}

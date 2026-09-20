@@ -1,0 +1,31 @@
+{
+  "schema": "dimaggi-autonomous-validation/v1",
+  "receiver_version": "0.1.8",
+  "receiver_tests": 739,
+  "receiver_failures": 0,
+  "receiver_errors": 0,
+  "receiver_skips": 0,
+  "go_top_level_tests": 285,
+  "go_packages": 33,
+  "go_race": "passed",
+  "go_vet": "passed",
+  "independent_acceptance": false,
+  "physical_accelerator_validation": false,
+  "operator_proof": false,
+  "longitudinal_rsi": "not_claimed",
+  "lab_stopped": true,
+  "proof_digests": {
+    "final-verification/manifest.json": "sha256:2d1f3375139313f54d4358f55b746fbd2598a9e1cf0281de6a7a5f52152cc966",
+    "final-verification/receiver.xml": "sha256:c3232c9fb3da222ebc75f816418fe3eaba2b8bc01f2d7f1c353863ec51e30e65",
+    "final-verification/benchmark.txt": "sha256:0c9210487e8d47d05fcc1595554e7fc247419699335adde2511f81913674924a",
+    "lab/evidence/campaign.json": "sha256:15e1412b083c0931d77c911227cd50c7155aa958973e92f394b74e7c6c62b6cf",
+    "lab/evidence/reconciliation.json": "sha256:2119154fbd66a9c9979a4d4d6dd193f1baf3a02b25cd92954bfdf60e4e81194f",
+    "lab/evidence/collector-receipt.json": "sha256:254325858f6398ce77873221e5f39263a7f900134a3aa0ab21d15afd6c97ee28",
+    "lab/evidence/isolated-refusals.json": "sha256:e4299d8d11ac191cc05653c2247d0653466d77b3c14e2cecca357f1066a0e522",
+    "lab/evidence-cycle2/campaign.json": "sha256:e1b834bda4f82475b4ef798d0be00a6db4849391b99e0386f89e7a5e19722bbd",
+    "lab/evidence-cycle2/transport-faults-result.json": "sha256:de1f37ccbf2fba7d73ada0197b7ee9186b055eb67f7d56ab8a75333c92e43973",
+    "lab/evidence-cycle2/state-faults-result.json": "sha256:223376b9267f2a34e3dae9fb2271a0333e4b4c87d482cfa7af8a12ded36fa643",
+    "lab/stopped-node.json": "sha256:78e40838d38b11534dd1738839a58d4f52fca564cd1fc951bd27acad27fce692",
+    "automation/installation.json": "sha256:0faad1d15f5b68fa7b3658626c367e766efa2c7780da7ac1b04e04246f4c96fe"
+  }
+}

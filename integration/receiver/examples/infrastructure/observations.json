@@ -1,0 +1,42 @@
+{
+  "items": [
+    {
+      "device_unit": "cpu_slot",
+      "epoch": "epoch-1",
+      "evidence_class": "synthetic",
+      "evidence_digest": "sha256:abbbe3f605a4c9dc8b4edd858b430e357333604abb8606c420bd6bfb07e36621",
+      "namespace_uid": "synthetic-ns-uid",
+      "object_uid": "synthetic-object-1",
+      "observed_at": "2026-09-20T12:00:01Z",
+      "partition": "whole",
+      "profile_id": "local.cpu.test-v1",
+      "resources": {
+        "cpu_millicores": 500,
+        "devices": 1,
+        "host_memory_bytes": 67108864,
+        "network_bytes_per_second": 0,
+        "power_watts": 20,
+        "scratch_bytes": 16777216,
+        "storage_bytes_per_second": 1000
+      },
+      "source_id": "synthetic-collector",
+      "stack": {
+        "architecture": "arm64",
+        "collectives": "none",
+        "device_plugin": "none",
+        "driver": "none",
+        "framework": "cpu-payload-1",
+        "network_plugin": "test-cni-1",
+        "orchestrator": "kubernetes-1.35.0",
+        "os": "linux",
+        "runtime": "test-runtime-1"
+      },
+      "state": "succeeded",
+      "target_id": "synthetic-cluster",
+      "topology": "single-host",
+      "workload_id": "payload-1"
+    }
+  ],
+  "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",
+  "schema": "dimaggi-infrastructure-observations/v1"
+}
