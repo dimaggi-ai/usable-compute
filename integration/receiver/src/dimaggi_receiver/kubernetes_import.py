@@ -181,8 +181,8 @@ def _job_state(job: Any, pods: list[dict[str, Any]], *, identity: dict[str, str]
     return "pending", ["job_present_waiting_for_pod_evidence"]
 
 
-def kubernetes_event(bundle_json: str | bytes, *, intent: dict[str, Any], expected_collector_id: str,
-                     expected_identity: dict[str, str]) -> dict[str, Any]:
+def _kubernetes_event(bundle_json: str | bytes, *, intent: dict[str, Any], expected_collector_id: str,
+                      expected_identity: dict[str, str], evidence_class: str) -> dict[str, Any]:
     """Validate one synthetic bundle and derive one workload read event.
 
     Outer fields are exact; unconsumed Kubernetes resource fields are retained as
@@ -202,9 +202,9 @@ def kubernetes_event(bundle_json: str | bytes, *, intent: dict[str, Any], expect
     if canonical(bundle["identity"]) != canonical(expected_identity):
         raise ObservationError("cluster, namespace or Job identity does not match configured scope")
     _text(expected_collector_id, "expected collector ID")
-    if (bundle["schema"] != SCHEMA or bundle["evidence_class"] != "synthetic" or intent["evidence_class"] != "synthetic"
+    if (bundle["schema"] != SCHEMA or bundle["evidence_class"] != evidence_class or intent["evidence_class"] != evidence_class
             or bundle["collector_id"] != expected_collector_id or intent["sources"]["workload"] != expected_collector_id):
-        raise ObservationError("only the configured synthetic observation source is supported")
+        raise ObservationError("only the configured observation source and evidence class are supported")
     if any(bundle[key] != intent[key] for key in IDENTITIES):
         raise ObservationError("observation is not bound to the registered application intent")
     _text(bundle["source_epoch"], "source epoch")
@@ -234,18 +234,31 @@ def kubernetes_event(bundle_json: str | bytes, *, intent: dict[str, Any], expect
         **{key: intent[key] for key in IDENTITIES}, "event_id": digest([SCHEMA, expected_collector_id, version]),
         "kind": "workload", "source_id": expected_collector_id, "source_epoch": bundle["source_epoch"],
         "source_record_id": intent["workload_id"], "source_version": version, "source_sequence": bundle["source_sequence"],
-        "observed_at_utc": bundle["observed_at_utc"], "object_id": object_id, "state": state, "evidence_class": "synthetic",
+        "observed_at_utc": bundle["observed_at_utc"], "object_id": object_id, "state": state, "evidence_class": evidence_class,
         "payload": {"adapter_schema": SCHEMA, "identity": expected_identity, "source_bundle": bundle, "pod_attempts": pods,
                     "interpretation_reasons": reasons, "grants_permission": False, "dispatch_possible": False,
                     "execution_proven": False},
     }
 
 
+def kubernetes_event(bundle_json: str | bytes, *, intent: dict[str, Any], expected_collector_id: str,
+                     expected_identity: dict[str, str]) -> dict[str, Any]:
+    """Public file import remains synthetic-only; JSON cannot assert TLS provenance."""
+    return _kubernetes_event(bundle_json, intent=intent, expected_collector_id=expected_collector_id,
+                             expected_identity=expected_identity, evidence_class="synthetic")
+
+
 def import_kubernetes(store: ObservationStore, bundle_json: str | bytes, *, request_id: str,
                       expected_collector_id: str, expected_identity: dict[str, str], recorded_at_utc: str) -> dict[str, Any]:
-    """Append one workload projection while preserving scope and prior attempts."""
+    """Append one synthetic workload projection while preserving prior attempts."""
     event = kubernetes_event(bundle_json, intent=store.intent(request_id), expected_collector_id=expected_collector_id,
                              expected_identity=expected_identity)
+    return _persist_event(store, event, expected_identity=expected_identity, recorded_at_utc=recorded_at_utc)
+
+
+def _persist_event(store: ObservationStore, event: dict[str, Any], *, expected_identity: dict[str, str],
+                   recorded_at_utc: str) -> dict[str, Any]:
+    request_id = event["request_id"]
     if _utc(recorded_at_utc) < _utc(event["observed_at_utc"]):
         raise ObservationError("collection time precedes the source observation")
     previous_versions = {}
@@ -289,5 +302,5 @@ def import_kubernetes(store: ObservationStore, bundle_json: str | bytes, *, requ
             store._conflict(event, recorded_at_utc, "later collector evidence regresses immutable-object terminal state")
     imported = store.append(event, recorded_at_utc=recorded_at_utc)
     return {"schema": "dimaggi-kubernetes-import/v1", "request_id": request_id, "imported_events": int(imported),
-            "duplicate_events": int(not imported), "state": event["state"], "evidence_class": "synthetic",
+            "duplicate_events": int(not imported), "state": event["state"], "evidence_class": event["evidence_class"],
             "permission": "not_granted", "dispatch_possible": False, "execution_proven": False}

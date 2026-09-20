@@ -1,3 +1,3 @@
-"""Offline application adapters; no scheduler client or execution authority."""
+"""Application adapters and explicit read-only collection; no execution authority."""
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

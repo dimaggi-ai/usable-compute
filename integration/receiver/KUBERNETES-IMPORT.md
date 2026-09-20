@@ -8,9 +8,9 @@ mutation or retry. It does not establish a usable lab or an operator result.
 
 This increment accepts only `evidence_class: synthetic`, including the registered
 application intent. It uses Kubernetes-shaped fixtures; it does not claim they
-were collected from a Kubernetes server. Live collection, source authentication,
-server-version compatibility and actual executor integration remain separate
-work. The adapter performs no memory, CPU, accelerator, storage or I/O sizing;
+were collected from a Kubernetes server. The separate [explicit TLS collector](KUBERNETES-COLLECT.md) provides a configured
+read path and verifier integration. This file-import adapter itself establishes
+no source authentication or server-version compatibility. The adapter performs no memory, CPU, accelerator, storage or I/O sizing;
 unconsumed resource declarations remain uninterpreted source data.
 
 ## Source contract and configuration
