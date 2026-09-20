@@ -3,9 +3,28 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 
 MAX_BYTES = 4 * 1024 * 1024
 MAX_DEPTH = 64
+
+
+def read_stream(stream):
+    """Read at most the byte boundary plus one refusal byte from a binary stream."""
+    raw = stream.read(MAX_BYTES + 1)
+    if len(raw) > MAX_BYTES:
+        raise ValueError("JSON input exceeds 4 MiB")
+    return raw
+
+
+def read_file(path):
+    """Open a regular input file without waiting on a FIFO or reading a device."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("JSON input must be a regular file")
+        return read_stream(stream)
 
 
 def _pairs(items):

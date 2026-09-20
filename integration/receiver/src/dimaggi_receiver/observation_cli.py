@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from .journal_import import import_journal
-from .jsonio import MAX_BYTES, loads
+from .jsonio import loads, read_file
 from .observations import ObservationStore
 
 COMMANDS = {
@@ -53,11 +53,7 @@ def add_commands(commands):
 
 
 def _read(path):
-    with path.open("rb") as source:
-        raw = source.read(MAX_BYTES + 1)
-    if len(raw) > MAX_BYTES:
-        raise ValueError("observation input exceeds 4 MiB")
-    return raw.decode("utf-8")
+    return read_file(path).decode("utf-8")
 
 
 def _register(store, intent):

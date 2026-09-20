@@ -56,7 +56,7 @@ def test_cycle_still_rejected_without_infinite_scalar_walk():
 @pytest.mark.parametrize("raw", ['{"\\ud800":1,"\\ud800":2}',
                                   '{"nested":{"\\udfff":1,"\\udfff":2}}'])
 def test_invalid_duplicate_keys_return_structured_cli_error(raw, monkeypatch, capsys):
-    monkeypatch.setattr("sys.stdin", io.StringIO(raw))
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(raw.encode("utf-8"))))
     assert main(["evaluate", "--sources", "/unused-invalid-input"]) == 2
     error = json.loads(capsys.readouterr().out)
     assert error["schema_version"] == "dimaggi-receiver-error/v1"

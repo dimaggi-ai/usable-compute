@@ -201,3 +201,21 @@ all seven real model cases, owner fixture round trips, exact numeric decisions,
 byte preservation, forged/rehashed report variants, source tampering/import
 shadowing and strict CLI boundaries. The separate operator-discovery, CPU lab
 execution and production authorization gates remain unfulfilled by these tests.
+
+Version 0.1.3 bounds file and stdin reads before parsing for `evaluate` and
+`policy-input`, sharing the same 4 MiB byte limit with observation imports.
+File inputs must be regular files; named pipes and devices are refused without
+waiting for a writer. Standard input remains a supported streaming source for
+`evaluate`; its read waits for EOF or the byte bound and has no wall-clock
+arrival deadline. Invalid or oversized input produces a structured refusal
+before domain evaluation. The byte limit does not bound total Python process
+memory or domain evaluation cost. Large journal exports still require a separate
+bounded transport design; this change does not add pagination or truncate them.
+
+The installed-receiver GitHub workflow builds a wheel on macOS, fetches the
+exact eight public source commits, verifies their locked file hashes and runs
+the receiver/domain tests with no unexpected skips. It explicitly excludes the
+two TENWA subprocess suites, which require separately supplied binaries. Run
+those separately with the documented
+TENWA binaries for cross-language acceptance. CI success does not establish
+another engineer's independent acceptance or real scheduler execution.

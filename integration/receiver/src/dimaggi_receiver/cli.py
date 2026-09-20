@@ -8,7 +8,7 @@ import sqlite3
 
 from .adapters import evaluate, exercise
 from .bindings import policy_input
-from .jsonio import dumps, loads
+from .jsonio import dumps, loads, read_file, read_stream
 from .report import build_report
 from .sources import verify_bundle
 from .observation_cli import COMMANDS, add_commands, run as run_observation
@@ -37,11 +37,12 @@ def main(argv=None):
         elif args.command == "exercise":
             result = exercise(args.sources)
         elif args.command == "evaluate":
-            result = evaluate(args.sources, loads(args.input.read_text() if args.input else sys.stdin.read()))
+            raw = read_file(args.input) if args.input else read_stream(sys.stdin.buffer)
+            result = evaluate(args.sources, loads(raw.decode("utf-8")))
         elif args.command == "verify-sources":
             result = verify_bundle(args.sources)
         else:
-            result = policy_input(args.report.read_bytes(), args.request_id)
+            result = policy_input(read_file(args.report), args.request_id)
         print(dumps(result), end="")
     except (OSError, ValueError, KeyError, TypeError, sqlite3.Error) as exc:
         print(dumps({"schema_version": "dimaggi-receiver-error/v1", "error": type(exc).__name__,
