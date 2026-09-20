@@ -219,3 +219,12 @@ two TENWA subprocess suites, which require separately supplied binaries. Run
 those separately with the documented
 TENWA binaries for cross-language acceptance. CI success does not establish
 another engineer's independent acceptance or real scheduler execution.
+
+Version 0.1.4 also supports 64-bit Darwin Python builds that omit the
+`F_OFD_SETLK` name: it uses command 90 from Apple's
+[published XNU ABI](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/fcntl.h).
+The same kernel OFD lock must succeed before SQLite opens; there is no fallback
+to an unlocked or process-scoped writer. Tests remove Python's constant, verify
+competing descriptors are refused even after an unrelated descriptor closes,
+and require unsupported kernel calls to fail before SQLite initialization.
+Other operating systems remain outside file-journal support.

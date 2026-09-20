@@ -20,7 +20,7 @@ jobs:
       - name: Build and install wheel
         run: |
           python -m pip wheel --wheel-dir "$RUNNER_TEMP/wheels" ./integration/receiver
-          python -m pip install --no-index --find-links "$RUNNER_TEMP/wheels" dimaggi-offline-receiver==0.1.3
+          python -m pip install --no-index --find-links "$RUNNER_TEMP/wheels" dimaggi-offline-receiver==0.1.4
           python -m pip install pytest==8.3.4
       - name: Export exact public source objects
         run: |

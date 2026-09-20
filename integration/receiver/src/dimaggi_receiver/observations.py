@@ -63,6 +63,20 @@ class SourceConflict(ObservationError):
     """An immutable identity/version was reused with different content."""
 
 
+def darwin_ofd_command():
+    """Select Darwin's documented ABI even when Python's build omitted the name."""
+    if sys.platform != "darwin" or struct.calcsize("P") != 8:
+        raise ObservationError("file journals currently support 64-bit Darwin OFD locking only")
+    import fcntl
+    # Apple xnu bsd/sys/fcntl.h defines F_OFD_SETLK as 90. Python builds
+    # against SDKs that hide the macro may omit the attribute. The kernel call
+    # must still succeed; never fall back to process-scoped or unlocked access.
+    command = getattr(fcntl, "F_OFD_SETLK", 90)
+    if command != 90:
+        raise ObservationError("unexpected Darwin OFD locking ABI")
+    return command
+
+
 def _identifier(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise ObservationError(f"{field} must be a nonempty trimmed string")
@@ -130,8 +144,7 @@ class ObservationStore:
                     import fcntl
                 except ImportError as exc:
                     raise ObservationError("file journals require supported Darwin OFD locking") from exc
-                if sys.platform != "darwin" or not hasattr(fcntl, "F_OFD_SETLK"):
-                    raise ObservationError("file journals currently support Darwin OFD locking only")
+                lock_command = darwin_ofd_command()
                 self._lock_fd = os.open(name, os.O_RDWR | (os.O_CREAT if create else 0), 0o600)
                 if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
                     raise ObservationError("file journal must be a regular file")
@@ -140,7 +153,7 @@ class ObservationStore:
                     # OFD ownership survives closure of other descriptors and
                     # rejects another descriptor even in this process. Byte 0
                     # does not overlap SQLite's lock-byte region at 1 GiB.
-                    fcntl.fcntl(self._lock_fd, fcntl.F_OFD_SETLK,
+                    fcntl.fcntl(self._lock_fd, lock_command,
                                 struct.pack("@qqihh", 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET))
                 except BlockingIOError as exc:
                     raise ObservationError("journal already has an active application writer") from exc
