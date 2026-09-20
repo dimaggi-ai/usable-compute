@@ -29,3 +29,16 @@ def test_bits_bytes_and_binary_decimal_are_distinct():
 def test_uncertain_or_inexact_quantities_refuse(value, unit, dimension):
     with pytest.raises(ValueError):
         normalize_quantity(value, unit, dimension)
+
+
+def test_long_fraction_cannot_round_into_an_integer():
+    with pytest.raises(ValueError):
+        normalize_quantity("1.000000000000000000000000000001", "B", "bytes")
+
+
+def test_callers_decimal_context_cannot_change_units():
+    from decimal import localcontext
+
+    with localcontext() as context:
+        context.prec = 2
+        assert normalize_quantity("1.25", "kW", "watts") == 1250

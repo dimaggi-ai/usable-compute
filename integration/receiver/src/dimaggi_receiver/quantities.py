@@ -38,7 +38,12 @@ def normalize_quantity(value, unit, dimension):
     expected, numerator, denominator = UNITS[unit]
     if dimension != expected or not number.is_finite() or number < 0:
         raise ValueError("invalid quantity dimension or value")
-    converted = number * numerator / denominator
-    if converted != converted.to_integral_value() or converted > 2**53 - 1:
+    # Integer ratios avoid ambient Decimal precision rounding a fractional
+    # byte into an integer or changing a power reservation.
+    value_numerator, value_denominator = number.as_integer_ratio()
+    converted, remainder = divmod(
+        value_numerator * numerator, value_denominator * denominator
+    )
+    if remainder or converted > 2**53 - 1:
         raise ValueError("quantity is fractional or exceeds exact integer boundary")
     return int(converted)
