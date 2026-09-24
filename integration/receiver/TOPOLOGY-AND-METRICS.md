@@ -1,6 +1,6 @@
 # Topology replay, outcome metrics and journal portability
 
-This candidate adds two read-only Python modules and a Linux locking path.
+This candidate provides topology, outcome accounting and portable journals.
 `topology.TopologyState` consumes attributed full snapshots through Topograph graph
 and Kubernetes ResourceSlice adapters. It preserves provider labels and raw DRA
 attributes, pool generations, opaque resource versions and object UIDs. It does
@@ -17,7 +17,8 @@ Each projection is scoped to one tenant and cluster. Source sequence is local
 adapter order, never an integer interpretation of Kubernetes resourceVersion.
 Conflicting versions and gaps taint a source until a new-epoch full relist. Full
 snapshots replace prior records, preserving deletion and UID-change effects in
-snapshot identity. No incremental watch client is implemented. Independent sources
+snapshot identity. The separate bounded TLS list/watch client and durable projection
+are documented in [collection support](TOPOLOGY-COLLECTION.md). Independent sources
 remain separate; overlapping provider IDs with differing descriptions are flagged
 as conflicts. Automatic identity joining and conflict arbitration are not qualified. Callers must not choose a convenient source to hide a conflict.
 
