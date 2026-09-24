@@ -13,44 +13,20 @@ from pathlib import Path
 
 from dimaggi_receiver.jsonio import loads, read_file
 from dimaggi_receiver.kubernetes_collect import Collector, CollectorConfig
-from dimaggi_receiver.observations import ObservationStore, darwin_ofd_command
+from dimaggi_receiver.observations import ObservationStore, ofd_lock_spec
 
 
 def read_private_token(path):
     """Check the opened file, not a raceable pre-open path stat."""
-    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
-    with os.fdopen(descriptor, "rb") as stream:
-        info = os.fstat(stream.fileno())
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
-                or info.st_mode & 0o077):
-            raise ValueError("credential file must be owner-only regular input")
-        # Darwin ACL entries can grant access despite restrictive mode bits.
-        # Reject any nontrivial ACL rather than claiming mode bits suffice.
-        import ctypes
-        libc = ctypes.CDLL(None, use_errno=True)
-        libc.acl_get_fd_np.argtypes = [ctypes.c_int, ctypes.c_int]
-        libc.acl_get_fd_np.restype = ctypes.c_void_p
-        libc.acl_free.argtypes = [ctypes.c_void_p]
-        libc.acl_free.restype = ctypes.c_int
-        ctypes.set_errno(0)
-        acl = libc.acl_get_fd_np(stream.fileno(), 0x100)  # Darwin ACL_TYPE_EXTENDED
-        if acl:
-            libc.acl_free(acl)
-            raise ValueError("credential ACL refused")
-        # Apple's acl_get_fd_np uses filesec_get_property(FILESEC_ACL);
-        # ENOENT means that property is absent on this already-opened fd.
-        if ctypes.get_errno() != errno.ENOENT:
-            raise ValueError("credential ACL inspection refused")
-        raw = stream.read(8194)
-        token = raw.decode("ascii").removesuffix("\n")
-        if not 0 < len(token) <= 8192:
-            raise ValueError("credential size refused")
-        return token
+    from dimaggi_receiver.private_inputs import read_private
+    token=read_private(path,8193).decode('ascii').removesuffix('\n')
+    if not 0<len(token)<=8192:raise ValueError('credential size refused')
+    return token
 
 
 def collect_once(args):
     # Refuse unsupported persistence before opening any input or making requests.
-    darwin_ofd_command()
+    ofd_lock_spec()
     if args.journal == ":memory:":
         raise ValueError("persistent journal required")
     config = loads(read_file(args.config).decode("utf-8"))

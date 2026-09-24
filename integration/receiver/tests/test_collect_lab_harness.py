@@ -44,11 +44,11 @@ def test_persistent_reopen_preserves_unknown_and_sequence(lab, tmp_path, monkeyp
     assert "source_bundle" not in json.dumps(two)
 
 
-@pytest.mark.parametrize("change", ["memory", "linux", "synthetic", "embedded_token", "duplicate_json", "bad_digest", "exposed_token", "symlink_token"])
+@pytest.mark.parametrize("change", ["memory", "unsupported_platform", "synthetic", "embedded_token", "duplicate_json", "bad_digest", "exposed_token", "symlink_token"])
 def test_refusal_without_http(lab, tmp_path, monkeypatch, change):
     args = inputs(lab, tmp_path, monkeypatch)
     if change == "memory": args.journal = ":memory:"
-    elif change == "linux": monkeypatch.setattr("sys.platform", "linux")
+    elif change == "unsupported_platform": monkeypatch.setattr("sys.platform", "unsupported")
     elif change == "exposed_token": Path(args.token_file).chmod(0o644)
     elif change == "symlink_token":
         link = tmp_path / "token-link"
@@ -81,11 +81,19 @@ def test_cli_exception_has_no_private_details(monkeypatch, capsys):
 def test_extended_acl_refuses_even_with_owner_only_mode(lab, tmp_path, monkeypatch):
     import subprocess
     args = inputs(lab, tmp_path, monkeypatch)
-    subprocess.run(["chmod", "+a", "everyone allow read", args.token_file], check=True)
+    import sys,os,struct
+    if sys.platform=='darwin':
+        subprocess.run(["chmod", "+a", "everyone allow read", args.token_file], check=True)
+    else:
+        # POSIX ACL with a masked named user remains nontrivial despite mode 0600.
+        acl=struct.pack('<I',2)+b''.join(struct.pack('<HHI',tag,perm,uid) for tag,perm,uid in
+            [(1,6,0xffffffff),(2,4,65534),(4,0,0xffffffff),(16,0,0xffffffff),(32,0,0xffffffff)])
+        os.setxattr(args.token_file,'system.posix_acl_access',acl)
     try:
         assert Path(args.token_file).stat().st_mode & 0o077 == 0
         with pytest.raises(ValueError, match="ACL"):
             harness.collect_once(args)
         assert lab[2] == []
     finally:
-        subprocess.run(["chmod", "-N", args.token_file], check=True)
+        if sys.platform=='darwin':subprocess.run(["chmod", "-N", args.token_file], check=True)
+        else:os.removexattr(args.token_file,'system.posix_acl_access')
