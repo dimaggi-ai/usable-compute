@@ -77,6 +77,25 @@ def darwin_ofd_command():
     return command
 
 
+def ofd_lock_spec():
+    """Qualified 64-bit Darwin/Linux ABIs; fail closed on unsupported targets."""
+    import fcntl
+    if sys.platform == 'darwin':
+        return darwin_ofd_command(), struct.pack('@qqihh', 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET)
+    import platform
+    if sys.platform != 'linux' or struct.calcsize('P') != 8 or platform.machine().lower() not in ('aarch64','arm64','x86_64','amd64'):
+        raise ObservationError('file journals require qualified Linux or Darwin OFD locking')
+    command = getattr(fcntl, 'F_OFD_SETLK', None)
+    if command != 37:
+        raise ObservationError('Linux OFD locking constant unavailable or unexpected')
+    # Linux asm-generic struct flock on the qualified LP64 ABIs: short type,
+    # short whence, padding, off_t start/len, pid_t pid, trailing padding.
+    payload = struct.pack('@hhqqi4x', fcntl.F_WRLCK, os.SEEK_SET, 0, 1, 0)
+    if len(payload) != 32:
+        raise ObservationError('unexpected Linux OFD locking ABI')
+    return command, payload
+
+
 def _identifier(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise ObservationError(f"{field} must be a nonempty trimmed string")
@@ -144,17 +163,17 @@ class ObservationStore:
                     import fcntl
                 except ImportError as exc:
                     raise ObservationError("file journals require supported Darwin OFD locking") from exc
-                lock_command = darwin_ofd_command()
+                lock_command, lock_payload = ofd_lock_spec()
                 self._lock_fd = os.open(name, os.O_RDWR | (os.O_CREAT if create else 0), 0o600)
                 if not stat.S_ISREG(os.fstat(self._lock_fd).st_mode):
                     raise ObservationError("file journal must be a regular file")
                 try:
-                    # Darwin sys/fcntl.h: off_t, off_t, pid_t, short, short.
+                    # Platform-qualified struct flock payload from ofd_lock_spec.
                     # OFD ownership survives closure of other descriptors and
                     # rejects another descriptor even in this process. Byte 0
                     # does not overlap SQLite's lock-byte region at 1 GiB.
                     fcntl.fcntl(self._lock_fd, lock_command,
-                                struct.pack("@qqihh", 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET))
+                                lock_payload)
                 except BlockingIOError as exc:
                     raise ObservationError("journal already has an active application writer") from exc
             if not create:

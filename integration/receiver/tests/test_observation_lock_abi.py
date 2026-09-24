@@ -2,15 +2,19 @@
 import errno
 import fcntl
 import os
+import sys
 
 import pytest
 
-from dimaggi_receiver.observations import ObservationError, ObservationStore, darwin_ofd_command
+from dimaggi_receiver.observations import ObservationError, ObservationStore, darwin_ofd_command, ofd_lock_spec
 
 
 def test_missing_python_constant_still_enforces_descriptor_ownership(monkeypatch, tmp_path):
-    monkeypatch.delattr(fcntl, 'F_OFD_SETLK', raising=False)
-    assert darwin_ofd_command() == 90
+    if sys.platform == 'darwin':
+        monkeypatch.delattr(fcntl, 'F_OFD_SETLK', raising=False)
+        assert darwin_ofd_command() == 90
+    else:
+        assert ofd_lock_spec()[0] == 37
     path = tmp_path / 'journal.sqlite'
     with ObservationStore(path):
         unrelated = os.open(path, os.O_RDONLY)
@@ -22,7 +26,7 @@ def test_missing_python_constant_still_enforces_descriptor_ownership(monkeypatch
 
 
 def test_kernel_refusal_never_falls_back(monkeypatch, tmp_path):
-    monkeypatch.delattr(fcntl, 'F_OFD_SETLK', raising=False)
+    expected = ofd_lock_spec()[0]
     calls = []
     def unsupported(fd, command, payload):
         calls.append(command)
@@ -31,11 +35,12 @@ def test_kernel_refusal_never_falls_back(monkeypatch, tmp_path):
     path = tmp_path / 'refused.sqlite'
     with pytest.raises(OSError, match='unsupported OFD'):
         ObservationStore(path)
-    assert calls == [90]
+    assert calls == [expected]
     assert path.read_bytes() == b''
 
 
 def test_wrong_platform_or_constant_refused(monkeypatch):
+    monkeypatch.setattr('sys.platform', 'darwin')
     monkeypatch.setattr(fcntl, 'F_OFD_SETLK', 999, raising=False)
     with pytest.raises(ObservationError, match='unexpected Darwin'):
         darwin_ofd_command()
