@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .journal_import import import_journal
 from .jsonio import loads, read_file
-from .observations import ObservationStore, darwin_ofd_command
+from .observations import ObservationStore, ofd_lock_spec
 
 COMMANDS = {
     "observations-init", "journal-import", "observations-show", "observations-reconcile",
@@ -74,7 +74,7 @@ def run(args):
             import fcntl
         except ImportError as exc:
             raise ValueError("file journals require supported Darwin OFD locking") from exc
-        darwin_ofd_command()
+        ofd_lock_spec()
         descriptor = os.open(args.journal, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(descriptor)
         with ObservationStore(args.journal) as store:

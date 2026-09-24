@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import tomllib
 import xml.etree.ElementTree as ET
 
 
@@ -50,8 +51,9 @@ def main():
     output = args.output.resolve()
     if not (tenwa / "internal/batchexecutor/executor.go").is_file():
         raise ValueError("reviewed TENWA checkout required")
-    if importlib.metadata.version("dimaggi-offline-receiver") != "0.1.8":
-        raise ValueError("install receiver 0.1.8 first")
+    expected_version = tomllib.loads((receiver / "integration/receiver/pyproject.toml").read_text())["project"]["version"]
+    if importlib.metadata.version("dimaggi-offline-receiver") != expected_version:
+        raise ValueError("install the exact receiver checkout version first")
     from dimaggi_receiver.sources import verify_bundle
 
     verify_bundle(sources)
