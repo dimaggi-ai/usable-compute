@@ -11,3 +11,20 @@ SQLite FULL synchronous transactions retain the last committed projection. This 
 The trusted collection host timestamps reads with its UTC clock and refuses responses that arrive after the configured validity interval. Observations cannot authorize execution. A candidate invalidates when a relevant snapshot changes or expires; uncertain submitted work requires reconciliation without retry. Topology snapshots cannot replace the executor's independent grant, target, namespace, object and attempt checks.
 
 Reference semantics: https://kubernetes.io/docs/reference/using-api/api-concepts/ (opaque resource versions; watch loss and 410 relist). Exact provider/server qualification remains in the release support matrix.
+
+Collectors trust ordering from the authenticated list/watch stream; Kubernetes
+resource versions are opaque and are not sorted numerically. Empty watch responses
+do not refresh observation time or expiry. A valid typed BOOKMARK may refresh the
+stream observation. Failed relists mark persisted state as requiring resync.
+
+Call `validate_inventory_agreement(inventories)` before composing several complete
+WatchStore inventories: contradictory records in the same scope refuse with
+`source_conflict`. TopologyState also compares DRA slices by driver, pool and name.
+The receiver cannot enforce this helper in the application's composition path;
+that consumer must call it or enforce equivalent checks.
+
+The 1,024-event batch bound remains a refusal boundary. Sustained event rates above
+it can prevent progress and require a shorter collection window. Node heartbeat
+resource-version changes still invalidate dependent snapshots. This conservative
+behavior needs live-cluster liveness qualification before a lab run; synthetic
+TLS tests do not establish production event-rate capacity.

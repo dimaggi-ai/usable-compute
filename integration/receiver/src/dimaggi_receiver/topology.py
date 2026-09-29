@@ -172,7 +172,12 @@ class TopologyState:
         seen = {}
         for source, state in rows.items():
             for name, record in state['records'].items():
-                if record['kind'] != 'provider-instance':
+                if record['kind'] == 'dra-resource-slice':
+                    spec = record['attributes']['spec']
+                    name = ('dra', spec['driver'], spec['pool']['name'], name)
+                elif record['kind'] == 'provider-instance':
+                    name = ('provider', name)
+                else:
                     continue
                 if name in seen and seen[name][1] != record:
                     other = seen[name][0]

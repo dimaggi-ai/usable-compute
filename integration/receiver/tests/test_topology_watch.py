@@ -62,7 +62,7 @@ def test_new_owner_invalidates_old_stream(store):
 def test_partial_list_scope_and_staleness(store):
     bad=listing();bad['metadata']['continue']='more'
     with pytest.raises(ObservationError):store.relist(bad,T,E)
-    assert store.snapshot(E)['issues']==['stale_or_future']
+    assert store.snapshot(E)['issues']==['resync_required', 'stale_or_future']
     bad=listing();bad['items'][0]['metadata']['namespace']='foreign'
     with pytest.raises(ObservationError):store.relist(bad,T,E)
 

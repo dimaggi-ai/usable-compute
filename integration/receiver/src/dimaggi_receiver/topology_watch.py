@@ -75,6 +75,13 @@ class WatchStore:
         return obj
 
     def relist(self, payload, observed_at, expires_at):
+        try:
+            return self._relist(payload, observed_at, expires_at)
+        except BaseException:
+            self.fail()
+            raise
+
+    def _relist(self, payload, observed_at, expires_at):
         bounded(payload)
         expires_at = capped_expiry(observed_at, expires_at)
         version, kind = KINDS[self.scope[2]]
@@ -117,6 +124,9 @@ class WatchStore:
                     need(type(event) is dict and set(event) == {'type','object'}, 'invalid watch frame')
                     typ = event['type']; need(typ in ('ADDED','MODIFIED','DELETED','BOOKMARK'), 'watch lost: relist required')
                     if typ == 'BOOKMARK':
+                        version, kind = KINDS[self.scope[2]]
+                        need(type(event['object']) is dict and event['object'].get('apiVersion') == version
+                             and event['object'].get('kind') == kind, 'bookmark type mismatch')
                         rv = _identifier(event['object'].get('metadata', {}).get('resourceVersion'), 'bookmark version')
                     else:
                         obj = self._object(event['object']); m = obj['metadata']; rv = m['resourceVersion']; name = m['name']
@@ -132,7 +142,8 @@ class WatchStore:
                     prior['last_event'] = _digest(event)
                     prior['events'] += 1
                     need(len(prior['records']) <= MAX_RECORDS, 'object bound exceeded')
-                prior['observed_at'], prior['expires_at'] = observed_at, expires_at
+                if events:
+                    prior['observed_at'], prior['expires_at'] = observed_at, expires_at
                 return prior
             return self._transaction(update)
         except BaseException:
@@ -148,13 +159,12 @@ class WatchStore:
 
 
 def _snapshot(value, now):
-        issues = []
-        if value['resync_required']: issues.append('resync_required')
-        if not current(value['observed_at'], value['expires_at'], now): issues.append('stale_or_future')
-        value.update(schema='dimaggi-kubernetes-watch/v1', issues=issues, execution_authorized=False)
-        value['snapshot_id'] = _digest(value)
-        return value
-
+    issues = []
+    if value['resync_required']: issues.append('resync_required')
+    if not current(value['observed_at'], value['expires_at'], now): issues.append('stale_or_future')
+    value.update(schema='dimaggi-kubernetes-watch/v1', issues=issues, execution_authorized=False)
+    value['snapshot_id'] = _digest(value)
+    return value
 
 def read_current(path, *, tenant, cluster, collection, namespace='', now):
     """Read a current collector projection without taking ownership or creating it."""
@@ -174,3 +184,14 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
             return result
     except (sqlite3.Error, KeyError, TypeError, OSError) as exc:
         raise ValueError('current topology unavailable') from exc
+
+
+def validate_inventory_agreement(inventories):
+    """Refuse contradictory complete inventories covering the same collection scope."""
+    need(type(inventories) is list and 1 <= len(inventories) <= 32, 'bounded inventories required')
+    seen = {}
+    for inventory in inventories:
+        scope = tuple(inventory['scope'])
+        records = inventory['records']
+        need(scope not in seen or seen[scope] == records, 'source_conflict')
+        seen[scope] = records
