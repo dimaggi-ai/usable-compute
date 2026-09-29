@@ -50,10 +50,13 @@ symlink. Opening uses `O_NOFOLLOW`; validation and I/O use that same descriptor.
 Concurrent reads take no collector write reservation; ledger access uses a
 bounded exclusive file lock. The reader ends its database transaction before
 waiting on the ledger lock or syncing the ledger. A second short read-only
-transaction compares the lease owner, heartbeat, live flag, generation, projection
-body and digest, and store identity with the first read. Any change refuses with
-`watch changed during reader verification`; retry from a fresh read. Such a
-changed snapshot never records expiry.
+transaction reopens the published path. A newer heartbeat is accepted only when
+projection bytes and digest, store identity, lease owner and generation are
+unchanged and the heartbeat has not regressed. Every lease and ledger decision is
+re-derived from the second snapshot. Projection or generation changes refuse with
+`watch changed during reader verification`. Retry with a fresh read and current
+caller time. Frequent projection changes or replacement during each SQL read can
+still starve every attempt; there is no reader availability SLA.
 
 The collector keeps its writable SQLite database in `<database>.collector/writer.db`.
 That directory must be owned by the collector and mode 0700. The writer uses WAL
@@ -65,25 +68,43 @@ grant its group read access to that file; replacements retain the file's mode an
 group. Keep the parent directory writable only by the collector. Reader and
 collector identities must be distinct for this permission boundary to hold.
 
-Readers use `mode=ro&immutable=1` on the published file. They need neither write
+On Linux, readers open with `O_RDONLY|O_NOFOLLOW`, hold that descriptor, and use
+`mode=ro&immutable=1` through `/proc/self/fd`. They fstat the held inode and confirm
+its device/inode still matches the pathname after SQLite finishes, including
+SQLite implementations that canonicalize the procfs link. Non-Linux readers fail
+closed. No tool may open the published file read-write; use immutable read-only
+access for inspection and the private writer for collector changes. They need neither write
 permission nor public WAL/SHM files. Each transaction copies raw rows, ends, and
 only then parses JSON or computes digests. `quick_check` reads the immutable
 snapshot and cannot lock the private writer database. The comparison opens the
 pathname again so it sees the latest published inode. A paused reader, overlapping
 readers, or a hostile process holding shared flock or POSIX locks on a published
-file cannot block replacement or the private writer's commits. CPU, storage and
-scheduler saturation are still environmental limits, not a hard real-time SLA.
+file cannot delay the collector through those locks. Readers can still exhaust
+storage by retaining descriptors to replaced inodes. Each pins a whole snapshot:
+the 10,000-item fixture with 600-byte padding occupies 7,434,240 bytes per initial
+publication, and later SQLite free-page growth can increase it. At three such
+publications per 30-second cycle, pinned space grows by 22,302,720 bytes per cycle
+(743,424 bytes/s). Inspect open deleted files with `lsof +L1` and filter its NAME
+column for the published directory; monitor free space too. Readers must close
+snapshots promptly. CPU, storage and scheduler saturation remain availability
+limits. Publication copies the entire database and fsyncs the file and directory
+on every commit. Timings measured on tmpfs do not qualify durable disk latency.
 
 This separation is necessary for hostile readers: in shared WAL mode, read access
 to `-shm` suffices to hold a POSIX read lock on SQLite's writer-lock byte and block
 heartbeats. WAL alone removes normal SQL-reader contention but not that attack.
-The old public `<database>.lease-lock` is neither created nor opened; a leftover
-file is ignored. No reader-accessible coordination file has a forced 0644 mode.
+Startup removes the old public `<database>.lease-lock` so legacy readers that
+require it refuse. A leftover lock is unsafe for mixed-version operation. No reader-accessible coordination file has a forced 0644 mode.
 
 Stop old collectors and upgrade readers and collectors together. On first open,
 the collector imports an existing database into its private directory, starts a
-new generation, and requires a relist. New readers require the publication-protocol
-marker. Keep the private directory with its published snapshot during backup and
+new generation, and requires a relist. After backup it removes public `-wal`,
+`-shm` and `-journal` residue; publication also removes those names before rename.
+Startup under the collector lock removes owned, regular, inactive `.watch-*`
+leftovers. New temporary names are scoped per store; live copies hold a lock that
+cleanup never waits for. Copies remain 0600 through data fsync, then receive the
+published mode/group immediately before rename. POSIX ACLs are not preserved.
+New readers require the publication-protocol marker. Keep the private directory with its published snapshot during backup and
 recovery; do not edit or delete either while a collector is active. Private
 `:memory:` stores have no published cross-process reader.
 
@@ -93,31 +114,48 @@ generation, even if the clock rolls back or the collector rewrites that lease.
 Reader observations do not close the collector's lease. The collector independently
 refuses expired generations; a new acquisition still requires a new relist.
 
-`close()` publishes a closed lease. Readers may record permanent death when the
-lease is closed, or when a wall sample taken **before opening the snapshot** is
-at least 57 seconds after its heartbeat: 45 seconds of lease age, 2 seconds of
-clock tolerance, and the 10-second commit/publication bound. The serving cutoff
-stays at 45 seconds, using a separate wall sample after reading the lease. Ages
-45 through less than 57 refuse without recording death. A delayed first sample
-may conservatively refuse without recording death even at a later serving age.
+`close()` commits a closed lease and publishes it. Any publication failure,
+including heartbeat or projection failure, attempts to unlink the published path.
+After successful unlink readers refuse as unavailable without recording death.
+`close()` completes only when closure is published or the path is absent; when
+both publication and unlink fail it raises and remains retryable. If permissions
+or filesystem failure prevent both actions, the old snapshot can remain readable
+until its 45-second serving cutoff. A crash before rename leaves the previous
+complete snapshot and possibly a temp copy; after rename it leaves the new complete
+snapshot. A crash before failure cleanup has the same lease-age bound. Power-loss
+durability before directory fsync is unqualified. Reads already in progress may
+finish from an earlier snapshot; withdrawal does not revoke returned receipts.
 
-A successful lease acquisition, heartbeat or projection write must finish
-COMMIT and publication within
-`COMMIT_BOUND_SECONDS = 10` of its validity check, measured by both monotonic and
-wall elapsed time. It stores the checked wall timestamp, never a fresh timestamp
-sampled at commit. A late commit or failed publication permanently retires that
-collector object: it attempts to close and publish the lease, and never renews
-the generation again even if cleanup fails. Projection writes and initial
-acquisition obey the same bound. Restart requires a new generation and relist.
+Readers serve a live snapshot only if the held inode's kernel ctime minus its
+checked heartbeat H is at most `COMMIT_BOUND_SECONDS = 10`. A late publication
+refuses without writing a tombstone. Rename updates ctime; an unprivileged process
+cannot backdate it, and later metadata changes can only cause additional refusal.
+This requires Linux local filesystems with rename-updated ctime and the same host
+wall-clock domain for the collector, reader and filesystem. Cross-host readers
+and network filesystems are unsupported. No extra two-second tolerance is added
+to the ctime comparison: ctime and H share a clock. Advancing wall clocks remain a
+prerequisite; arbitrary corrections are not solved by ctime.
 
-For the expiry argument, let T0 be the pre-open reader wall sample and H the
-snapshot's heartbeat. A missing renewal must publish after T0. A successful
-renewal's check precedes publication by at most 10 seconds; with clocks within
-2 seconds and advancing wall clocks, H is greater than T0 minus 57 seconds.
-Thus T0-H >= 57 excludes any successful missing renewal. A later publication
-abandons its generation. The wall-elapsed check also rejects elapsed wall time beyond the bound,
-including large forward clock steps that a monotonic-only check would miss. Arbitrary
-clock corrections retain the limits below.
+Lease acquisition, heartbeat and projection writes all store the checked wall
+timestamp. The collector retains its post-publication wall and monotonic elapsed
+checks as defence in depth, retiring a late operation and requiring restart and
+relist. Those checks are not the visibility bound: the reader's ctime check is.
+First acquisition and migrated snapshots pass through the same publication path.
+
+The serving cutoff remains age 45. Ages 45 through less than 57 refuse without
+recording death. A closed lease can record death. Otherwise, recording death
+requires a timely publication and age at least 57 at the wall sample T0 taken
+before opening its inode.
+For the proof, call the old heartbeat H0 and a missing renewal's checked heartbeat
+H1. A missing renewal is renamed after T0, so its kernel publication time P > T0
+(up to filesystem timestamp resolution). If any reader can serve it, P-H1 <= 10,
+so H1 >= P-10 > T0-10. A correct collector renews only while H1-H0 < 45.
+Thus H0 > T0-55: death at T0-H0 >= 57 cannot exclude a servable correct renewal.
+The existing two-second margin is retained conservatively, including timestamp
+resolution; it is not permission for cross-host use. A renewal outside the ctime
+bound can never be served, even while its collector is stopped before retirement.
+A slow reader uses T0 for death and a later sample for serving, so it may refuse
+without recording death even beyond age 57.
 
 An already tombstoned generation always reports `collector generation previously
 expired`. Otherwise a **live** lease with a heartbeat more than two seconds in the
@@ -133,8 +171,8 @@ The collector commits its own lease closure when its checks detect expiry or
 excessive future skew. Collectors also refuse renewal after 45 seconds of
 monotonic elapsed time since their last checked renewal. Heartbeat persists the
 wall time sampled in its owner check and re-checks monotonic elapsed time before
-commit. The post-publication bound catches a collector stopped between check and
-commit, including projection writes. Readers do not wait for that operation.
+commit. The reader ctime check refuses publication delayed beyond the bound; the
+collector post-publication check retires it when execution resumes. Readers do not wait for that operation.
 Recovery requires a new WatchStore acquisition and a new relist, not a heartbeat
 of the old lease.
 
