@@ -5,6 +5,7 @@ restart or any stream error a full list is mandatory; persisted rows are evidenc
 not a claim that a disconnected watcher is current. SQLite serializes writers.
 """
 from copy import deepcopy
+from contextlib import closing
 import json
 import sqlite3
 import re
@@ -174,7 +175,7 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
     """Read a current collector projection without taking ownership or creating it."""
     try:
         uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro'
-        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
             db.execute('BEGIN')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
             row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()

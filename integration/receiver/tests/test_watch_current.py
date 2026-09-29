@@ -30,3 +30,17 @@ def test_read_current_is_read_only_consistent_and_fails_closed(tmp_path):
         with pytest.raises(ValueError): read(path)
     finally:
         store.close()
+
+
+def test_current_reader_closes_its_connection(tmp_path, monkeypatch):
+    path=tmp_path/'watch.db'
+    store=watch.WatchStore(path,'t','c','nodes')
+    payload=listing();payload['metadata']['resourceVersion']='12'
+    store.relist(payload,T,E);store.close()
+    original=sqlite3.connect; opened=[]
+    def connect(*args, **kwargs):
+        connection=original(*args, **kwargs);opened.append(connection);return connection
+    monkeypatch.setattr(sqlite3,'connect',connect)
+    read(path)
+    with pytest.raises(sqlite3.ProgrammingError,match='closed'):
+        opened[0].execute('SELECT 1')
