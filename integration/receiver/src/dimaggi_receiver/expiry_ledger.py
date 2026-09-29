@@ -15,6 +15,7 @@ def initialize_expiry_ledger(path):
     """Provision once as the reader identity; never replace an existing ledger."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'w') as stream:
+        os.fchmod(stream.fileno(), 0o600)
         stream.write(HEADER)
         stream.flush()
         os.fsync(stream.fileno())
