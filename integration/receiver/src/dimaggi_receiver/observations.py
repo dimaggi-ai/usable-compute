@@ -188,6 +188,7 @@ class ObservationStore:
                 self.db = sqlite3.connect("file:" + quote(str(Path(name).absolute()), safe="/") + "?mode=rw", uri=True)
             else:
                 self.db = sqlite3.connect(name)
+            self.db.create_function('decision_hash', 4, lambda table, key, body, previous: _digest([table, key, json.loads(body), previous]))
             self.db.execute('PRAGMA synchronous=FULL')
             if sys.platform == 'darwin':
                 self.db.execute('PRAGMA fullfsync=ON')
@@ -213,6 +214,7 @@ class ObservationStore:
             raise
 
     def _initialize(self) -> None:
+        had_integrity = self.db.execute("SELECT 1 FROM sqlite_master WHERE name='event_integrity'").fetchone() is not None
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript("""
@@ -255,13 +257,70 @@ class ObservationStore:
                 id INTEGER PRIMARY KEY CHECK(id=1), count INTEGER NOT NULL, head TEXT NOT NULL);
         """)
         if not self.db.execute('SELECT 1 FROM chain_state').fetchone():
+            if had_integrity:
+                raise ObservationError('journal integrity state missing')
             rows = self.db.execute('SELECT position FROM events ORDER BY position').fetchall()
             self.db.executemany("INSERT INTO event_integrity VALUES (?,NULL,NULL,NULL,'unverified-legacy')",
                                 [(row[0],) for row in rows])
             self.db.execute('INSERT INTO chain_state VALUES(1,?,?)', (len(rows), '0'*64))
+        self._initialize_decisions()
         self.db.commit()
 
+    _DECISIONS = ('intents', 'sources', 'conflicts', 'reconciliations', 'triage', 'resolutions')
+
+    def _initialize_decisions(self):
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS decision_integrity (
+                position INTEGER PRIMARY KEY, table_name TEXT NOT NULL, row_key TEXT NOT NULL,
+                previous_sha256 TEXT NOT NULL, row_sha256 TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS decision_state (
+                id INTEGER PRIMARY KEY CHECK(id=1), count INTEGER NOT NULL, head TEXT NOT NULL);
+        """)
+        if not self.db.execute('SELECT 1 FROM decision_state').fetchone():
+            if self.db.execute('SELECT 1 FROM decision_integrity LIMIT 1').fetchone():
+                raise ObservationError('journal integrity decision state missing')
+            self.db.execute('INSERT INTO decision_state VALUES(1,0,?)', ('0'*64,))
+        for table in self._DECISIONS:
+            columns = [row[1] for row in self.db.execute(f'PRAGMA table_info({table})')]
+            values = ','.join('NEW.' + column for column in columns)
+            self.db.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_integrity_insert
+                AFTER INSERT ON {table} BEGIN
+                INSERT INTO decision_integrity
+                SELECT count+1, '{table}', NEW.{columns[0]}, head,
+                       decision_hash('{table}', NEW.{columns[0]}, json_array({values}), head)
+                FROM decision_state WHERE id=1;
+                UPDATE decision_state SET count=count+1,
+                    head=(SELECT row_sha256 FROM decision_integrity ORDER BY position DESC LIMIT 1)
+                    WHERE id=1;
+                END""")
+
+    def _verify_decisions(self):
+        try:
+            state = self.db.execute('SELECT count,head FROM decision_state WHERE id=1').fetchone()
+            links = self.db.execute('SELECT * FROM decision_integrity ORDER BY position').fetchall()
+            actual = {}
+            for table in self._DECISIONS:
+                for row in self.db.execute(f'SELECT * FROM {table}'):
+                    actual[(table, row[0])] = list(row)
+            if state is None or len(links) != state['count'] or len(actual) != len(links):
+                raise ObservationError('journal integrity decision count mismatch; legacy data requires rebaseline')
+            previous = '0'*64
+            for position, link in enumerate(links, 1):
+                key = (link['table_name'], link['row_key'])
+                values = actual.pop(key, None)
+                expected = _digest([*key, values, previous])
+                if (values is None or link['position'] != position or link['previous_sha256'] != previous
+                        or link['row_sha256'] != expected):
+                    raise ObservationError('journal integrity decision digest mismatch')
+                previous = expected
+            if state['head'] != previous:
+                raise ObservationError('journal integrity decision head mismatch')
+            return {'count': len(links), 'sha256': previous}
+        except sqlite3.Error as exc:
+            raise ObservationError('journal integrity decisions unavailable') from exc
+
     def _verify_chain(self, *, allow_legacy=False):
+        self._verify_decisions()
         try:
             if self.db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise ObservationError('journal integrity check failed')
@@ -293,8 +352,14 @@ class ObservationStore:
         except sqlite3.Error as exc:
             raise ObservationError('journal integrity unavailable') from exc
 
-    def chain_head(self):
-        return self._verify_chain()
+    def chain_head(self, *, expected=None):
+        events = self._verify_chain()
+        decisions = self._verify_decisions()
+        head = dict(events, decision_count=decisions['count'],
+                    sha256=_digest({'events': events, 'decisions': decisions}))
+        if expected is not None and head != expected:
+            raise ObservationError('journal integrity external anchor mismatch')
+        return head
 
     def close(self) -> None:
         try:
@@ -314,6 +379,7 @@ class ObservationStore:
 
     def register_source(self, source_id: str, kind: str, target_id: str) -> bool:
         """Declare a read-source role; registration authenticates no evidence."""
+        self._verify_decisions()
         _identifier(source_id, "source_id")
         _identifier(target_id, "target_id")
         if type(kind) is not str or kind not in KINDS:
@@ -329,6 +395,7 @@ class ObservationStore:
 
     def register_intent(self, intent: dict[str, Any]) -> bool:
         """Persist application intent before importing any attempt/observation."""
+        self._verify_decisions()
         if type(intent) is not dict or set(intent) != INTENT_KEYS:
             raise ObservationError("intent fields must match the declared contract")
         for field in IDENTITIES:
@@ -355,6 +422,7 @@ class ObservationStore:
         return True
 
     def intent(self, request_id: str) -> dict[str, Any]:
+        self._verify_decisions()
         _identifier(request_id, "request_id")
         row = self.db.execute("SELECT body FROM intents WHERE request_id=?", (request_id,)).fetchone()
         if not row:
@@ -362,6 +430,7 @@ class ObservationStore:
         return json.loads(row["body"])
 
     def _conflict(self, event: dict[str, Any], recorded_at: str, reason: str) -> None:
+        self._verify_decisions()
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO conflicts VALUES (?, ?, ?, ?, ?)", (
                 _digest([event, reason]), event["request_id"], recorded_at, reason, _json(event)))
@@ -625,6 +694,7 @@ class ObservationStore:
         return True
 
     def triage_history(self, case_id: str) -> list[dict[str, Any]]:
+        self._verify_decisions()
         _identifier(case_id, "case_id")
         notes = [json.loads(row["body"]) for row in self.db.execute("SELECT body FROM triage WHERE case_id=?", (case_id,))]
         return sorted(notes, key=lambda item: (_utc(item["recorded_at_utc"]), item["triage_id"]))
@@ -639,6 +709,7 @@ class ObservationStore:
         attempt or changes source truth. A later recurrence remains active. Both
         snapshots and the exact freshness policy are immutable evidence bindings.
         """
+        self._verify_decisions()
         arguments = {
             "resolution_id": resolution_id,
             "opening_reconciliation_id": opening_reconciliation_id,
@@ -697,6 +768,7 @@ class ObservationStore:
 
     def resolution_history(self, case_id: str) -> list[dict[str, Any]]:
         """Historical application notes; current cases always remain computed."""
+        self._verify_decisions()
         _identifier(case_id, "case_id")
         notes = [json.loads(row["body"]) for row in self.db.execute(
             "SELECT body FROM resolutions WHERE case_id=?", (case_id,))]
