@@ -418,9 +418,14 @@ def test_installed_cli_exact_example_commands(tmp_path):
     t = fixture.topology_fixture()
     store.relist({'apiVersion':'v1', 'kind':'NodeList', 'metadata':{'resourceVersion':'12'},
                   'items':list(t['records'].values())}, t['observed_at'], t['expires_at'])
+    # Freeze the subprocess too: these are historical fixture timestamps.
+    runner = ("from unittest.mock import patch; from dimaggi_receiver.observations import _utc; "
+              "from dimaggi_receiver.cli import main; "
+              "clock = patch('time.time', return_value=_utc('2026-09-20T12:00:01Z').timestamp()); "
+              "clock.start(); raise SystemExit(main())")
     for cmd, args, key, expected in commands:
         result = subprocess.run(
-            [sys.executable, "-m", "dimaggi_receiver.cli", cmd, *args],
+            [sys.executable, "-c", runner, cmd, *args],
             capture_output=True,
             text=True,
             timeout=10,
