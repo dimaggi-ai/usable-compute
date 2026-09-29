@@ -32,12 +32,15 @@ def check(xml_path, lock_path):
     expected = int(pin == OLD_SIMULATOR)
     if len(skips) != expected or sum(int(s.get('skipped', 0)) for s in suites) != len(skips):
         raise ValueError('unexpected skipped receiver acceptance test')
-    if not expected:
-        critical = json.loads(Path(__file__).with_name('critical_tests.json').read_text())
-        for classname, name in critical:
-            matches = [case for case in cases if (case.get('classname'), case.get('name')) == (classname, name)]
-            if len(matches) != 1 or any(matches[0].find(tag) is not None for tag in ('skipped', 'error', 'failure')):
-                raise ValueError('required receiver regression missing or not passing: ' + classname + '::' + name)
+    # Critical regressions are required at every pin. At the old simulator pin the
+    # simulator regression is instead the single known expected failure checked below.
+    critical = json.loads(Path(__file__).with_name('critical_tests.json').read_text())
+    for classname, name in critical:
+        if expected and (classname, name) == (KNOWN_CLASS, KNOWN_TEST):
+            continue
+        matches = [case for case in cases if (case.get('classname'), case.get('name')) == (classname, name)]
+        if len(matches) != 1 or any(matches[0].find(tag) is not None for tag in ('skipped', 'error', 'failure')):
+            raise ValueError('required receiver regression missing or not passing: ' + classname + '::' + name)
     if expected:
         case, skip = skips[0]
         if (case.get('classname') != KNOWN_CLASS or case.get('name') != KNOWN_TEST

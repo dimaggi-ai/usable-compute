@@ -225,8 +225,10 @@ file hashes and run source-bound tests. The JUnit gate allows exactly the named
 strict simulator xfail while its old commit remains pinned; every other skip
 refuses. Pytest defaults to strict xfail; the report hook also turns explicitly
 non-strict XPASS into a failing exit. The gate requires the hook's policy marker,
-rejects detectable `wasxfail`/XPASS representations, and after re-pin requires
-every test declared in `tools/critical_tests.json` to appear once and pass.
+rejects detectable `wasxfail`/XPASS representations, and requires every test
+declared in `tools/critical_tests.json` to appear once and pass. While the old
+simulator commit is pinned, the simulator regression in that list is instead the
+one allowed xfail.
 JUnit alone cannot identify XPASS if an external producer strips its marker and
 reports an ordinary pass; the policy marker is evidence from the configured
 runner, not authentication of arbitrary XML. Four TENWA subprocess suites require separately supplied binaries and
