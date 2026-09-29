@@ -57,7 +57,10 @@ refuses expired generations; a new acquisition still requires a new relist.
 `close()` closes the collector lease. A reader records a future heartbeat or one
 at least 45 seconds old as dead in its ledger; a collector durably closes its own
 lease on either observation. A later wall-clock rollback cannot undo either record. Collectors also refuse renewal after
-45 seconds of monotonic elapsed time since their last renewal. Recovery requires
+45 seconds of monotonic elapsed time since their last checked renewal. Heartbeat
+persists the wall time sampled in its owner check and re-checks monotonic elapsed
+time immediately before commit. A pause after that last check can delay commit,
+but cannot replace the checked timestamp with a later, fresh one. Recovery requires
 a new WatchStore acquisition and a new relist, not a heartbeat of the old lease.
 
 With an advancing wall clock, a crash is detected on the first read at least
@@ -66,8 +69,8 @@ that a reader runs within 45 seconds. An unobserved forward clock jump followed
 by rollback cannot be remembered. A rollback before any expiry observation can
 extend a dead lease's apparent wall-clock lifetime if it lands after the last
 heartbeat; repeated corrections have no finite real-time detection bound for
-readers. A surviving collector's monotonic check prevents renewal after suspension,
-and a restarted collector always needs a new generation and relist. Protect the collector database and its parent directory so the evaluator identity
+readers. A surviving collector checks elapsed time again before committing a renewal;
+a restarted collector always needs a new generation and relist. Protect the collector database and its parent directory so the evaluator identity
 can read but cannot modify or replace them. The collector identity can forge
 unkeyed observations, store identities and generations. The evaluator identity
 can alter its own expiry ledger and process-local receipts; it cannot forge the

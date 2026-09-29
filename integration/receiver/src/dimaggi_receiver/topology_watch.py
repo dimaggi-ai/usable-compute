@@ -69,12 +69,14 @@ class WatchStore:
     def _check_owner(self):
         row = self.db.execute('SELECT owner,generation,live,heartbeat FROM lease WHERE id=1').fetchone()
         need(row is not None and row[:2] == (self.owner_id, self.generation), 'collector lease lost')
-        valid = row[2] == 1 and 0 <= time.time() - row[3] < LEASE_SECONDS
-        valid = valid and 0 <= time.monotonic() - self.last_tick < LEASE_SECONDS
+        wall, tick = time.time(), time.monotonic()
+        valid = row[2] == 1 and 0 <= wall - row[3] < LEASE_SECONDS
+        valid = valid and 0 <= tick - self.last_tick < LEASE_SECONDS
         if not valid:
             self.db.execute('UPDATE lease SET live=0 WHERE id=1')
             self.db.execute('COMMIT')
             need(False, 'collector lease closed or expired')
+        return wall, tick
 
     def _disconnect(self, prior):
         if prior:
@@ -85,10 +87,14 @@ class WatchStore:
     def heartbeat(self):
         self.db.execute('BEGIN IMMEDIATE')
         try:
-            self._check_owner()
-            self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1', (time.time(),))
+            wall, tick = self._check_owner()
+            self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1', (wall,))
+            if not 0 <= time.monotonic() - self.last_tick < LEASE_SECONDS:
+                self.db.execute('UPDATE lease SET live=0 WHERE id=1')
+                self.db.execute('COMMIT')
+                need(False, 'collector lease closed or expired')
             self.db.execute('COMMIT')
-            self.last_tick = time.monotonic()
+            self.last_tick = tick
         except BaseException:
             if self.db.in_transaction: self.db.execute('ROLLBACK')
             raise
