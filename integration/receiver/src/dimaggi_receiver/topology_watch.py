@@ -7,7 +7,7 @@ not a claim that a disconnected watcher is current. SQLite serializes writers.
 from copy import deepcopy
 import json
 import sqlite3
-from .topology import need, bounded, MAX_RECORDS
+from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
 from .observations import _identifier, _utc, _digest
 
 KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'ResourceSlice'),
@@ -67,7 +67,7 @@ class WatchStore:
 
     def relist(self, payload, observed_at, expires_at):
         bounded(payload)
-        need(_utc(observed_at) < _utc(expires_at), 'invalid validity')
+        expires_at = capped_expiry(observed_at, expires_at)
         version, kind = KINDS[self.scope[2]]
         need(payload.get('apiVersion') == version and payload.get('kind') == kind+'List', 'list type mismatch')
         meta = payload.get('metadata', {})
@@ -100,7 +100,7 @@ class WatchStore:
         try:
             bounded(events)
             need(type(events) is list and len(events) <= 1024, 'watch queue overflow')
-            need(_utc(observed_at) < _utc(expires_at), 'invalid validity')
+            expires_at = capped_expiry(observed_at, expires_at)
             def update(prior):
                 need(prior is not None and self.session == prior['session'] and not prior['resync_required'], 'relist required')
                 need(_utc(observed_at) >= _utc(prior['observed_at']), 'watch clock regressed')
@@ -135,7 +135,7 @@ class WatchStore:
         need(row is not None, 'no topology collection')
         value = json.loads(row[0]); issues = []
         if value['resync_required']: issues.append('resync_required')
-        if not _utc(value['observed_at']) <= _utc(now) < _utc(value['expires_at']): issues.append('stale_or_future')
+        if not current(value['observed_at'], value['expires_at'], now): issues.append('stale_or_future')
         value.update(schema='dimaggi-kubernetes-watch/v1', issues=issues, execution_authorized=False)
         value['snapshot_id'] = _digest(value)
         return value

@@ -4,8 +4,10 @@ Producer sequence is local adapter order, never a parsed Kubernetes resourceVers
 Sources are independent; conflicts and partial coverage cannot disappear in a merge.
 """
 from copy import deepcopy
+from datetime import timedelta
 from .observations import ObservationError, _digest, _identifier, _utc, _json
 
+MaxBindingValidity = 300
 MAX_RECORDS = 10000
 MAX_BYTES = 8 * 1024 * 1024
 
@@ -13,6 +15,16 @@ MAX_BYTES = 8 * 1024 * 1024
 def need(condition, reason):
     if not condition:
         raise ObservationError(reason)
+
+
+def capped_expiry(observed_at, expires_at):
+    observed, expiry = _utc(observed_at), _utc(expires_at)
+    need(observed < expiry, 'invalid validity interval')
+    return min(expiry, observed + timedelta(seconds=MaxBindingValidity)).isoformat().replace('+00:00', 'Z')
+
+
+def current(observed_at, expires_at, now):
+    return _utc(observed_at) <= _utc(now) < _utc(capped_expiry(observed_at, expires_at))
 
 
 def bounded(value):
@@ -111,7 +123,8 @@ class TopologyState:
         need(event['evidence_class'] in ('reference','replay','observed'), 'unsupported evidence class')
         source = _identifier(event['source'], 'source'); epoch = _identifier(event['epoch'], 'epoch')
         need(type(event['sequence']) is int and event['sequence'] >= 0, 'invalid source sequence')
-        need(_utc(event['observed_at']) < _utc(event['expires_at']), 'invalid validity interval')
+        event = deepcopy(event)
+        event['expires_at'] = capped_expiry(event['observed_at'], event['expires_at'])
         need(event['mode'] == 'full', 'incremental updates require relist in this profile')
         adapter = {'topograph': topograph, 'kubernetes-dra': kubernetes}.get(event['adapter'])
         need(adapter is not None, 'unknown adapter')
@@ -141,12 +154,11 @@ class TopologyState:
         return 'changed'
 
     def snapshot(self, now):
-        now = _utc(now)
         rows, issues = {}, []
         for source, state in sorted(self.sources.items()):
             event = state['event']
             problems = list(state['issues'])
-            if not _utc(event['observed_at']) <= now < _utc(event['expires_at']):
+            if not current(event['observed_at'], event['expires_at'], now):
                 problems.append('stale_or_future')
             if source in self.tainted:
                 problems.append('resync_required')

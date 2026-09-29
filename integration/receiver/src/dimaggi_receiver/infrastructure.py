@@ -656,7 +656,11 @@ def cpu_binding(registry, request, expected_digest, planned, as_of):
         or not 1 <= r["scratch_bytes"] <= 64 << 20
     ):
         raise ValueError("CPU binding exceeds the bounded executor contract")
+    from .topology import MaxBindingValidity
+
     expiry = min(
+        stamp(as_of) + timedelta(seconds=MaxBindingValidity),
+        stamp(p["observed_at"]) + timedelta(seconds=MaxBindingValidity),
         stamp(profile["valid_until"]),
         stamp(p["observed_at"]) + timedelta(seconds=request["freshness_seconds"]),
         *(
