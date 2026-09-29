@@ -5,7 +5,9 @@ from dimaggi_receiver import topology_watch as watch
 from test_topology_watch import listing, T, E
 
 
-def read(path, now=T):
+def read(path, now=None):
+    from datetime import datetime, timezone
+    if now is None: now = datetime.fromtimestamp(watch.time.time(), timezone.utc).isoformat().replace("+00:00", "Z")
     return watch.read_current(path, tenant='t', cluster='c', collection='nodes', namespace='', now=now)
 
 

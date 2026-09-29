@@ -5,6 +5,7 @@ restart or any stream error a full list is mandatory; persisted rows are evidenc
 not a claim that a disconnected watcher is current. SQLite serializes writers.
 """
 from copy import deepcopy
+from datetime import datetime, timezone
 from contextlib import closing
 import json
 import sqlite3
@@ -259,18 +260,20 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
             db.execute('BEGIN IMMEDIATE')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
             lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
-            live = lease is not None and lease[0] and lease[2] == 1 and 0 <= time.time() - lease[1] < LEASE_SECONDS
+            wall = time.time()
+            live = lease is not None and lease[0] and lease[2] == 1 and 0 <= wall - lease[1] < LEASE_SECONDS
             if not live:
                 db.execute('UPDATE lease SET live=0 WHERE id=1')
                 db.commit()
             need(live, 'collector lease closed or expired')
+            need(abs(_utc(now).timestamp() - wall) <= 2, 'reader clock differs from wall clock')
             row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
             need(row is not None, 'no topology collection')
             value = json.loads(row[0])
             need(row[1] == _digest(value), 'watch integrity mismatch')
             need(value.get('generation') == lease[3] and lease[3], 'projection generation mismatch')
             need(value['scope'] == [tenant, cluster, collection, namespace], 'watch scope mismatch')
-            result = _snapshot(value, now)
+            result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
             need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
             need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')
             return _seal_snapshot(result, path)

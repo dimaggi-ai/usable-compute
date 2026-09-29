@@ -9,15 +9,16 @@ from test_topology_watch import T, E
 @pytest.mark.parametrize('observer', ['reader', 'heartbeat', 'write'])
 def test_expiry_is_durable_across_rollback(tmp_path, observer):
     path = tmp_path/'watch.db'
-    with patch.object(w.time, 'time', return_value=1000):
+    start = w._utc(T).timestamp()
+    with patch.object(w.time, 'time', return_value=start):
         s, payload = live(path)
     try:
-        with patch.object(w.time, 'time', return_value=1046):
+        with patch.object(w.time, 'time', return_value=start+46):
             with pytest.raises(ValueError):
                 if observer == 'reader': read(path)
                 elif observer == 'heartbeat': s.heartbeat()
                 else: s._relist(payload, T, E)
-        with patch.object(w.time, 'time', return_value=1001):
+        with patch.object(w.time, 'time', return_value=start+1):
             with pytest.raises(ValueError): read(path)
             with pytest.raises(ValueError): s.heartbeat()
             replacement = w.WatchStore(path, 't', 'c', 'nodes')

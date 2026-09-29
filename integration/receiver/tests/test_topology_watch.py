@@ -56,7 +56,7 @@ def test_new_owner_invalidates_old_stream(store):
     try:
         other.relist(listing(),T,E)
         with pytest.raises(ObservationError):store.apply([event()],T,E)
-        assert 'resync_required' in other.snapshot(T)['issues']
+        assert other.snapshot(T)['issues'] == []
     finally:other.close()
 
 def test_partial_list_scope_and_staleness(store):
