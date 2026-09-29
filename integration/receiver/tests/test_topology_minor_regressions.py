@@ -35,3 +35,14 @@ def test_bookmark_envelope_validated(store):
 def test_conflicting_scoped_inventory_refused(store):
     first=store.snapshot(T); other=deepcopy(first); other['records']['n1']['metadata']['uid']='other'
     with pytest.raises(ValueError): topology_watch.validate_inventory_agreement([first, other])
+
+
+def test_typed_bookmark_and_heartbeat_invalidate_snapshot(store):
+    from test_topology_watch import event as watch_event
+    before=store.snapshot(T)
+    store.apply([{'type':'BOOKMARK','object':{'apiVersion':'v1','kind':'Node','metadata':{'resourceVersion':'20'}}}],T,E)
+    bookmarked=store.snapshot(T)
+    assert bookmarked['snapshot_id'] != before['snapshot_id']
+    store.apply([watch_event(rv='21')],T,E)
+    assert store.snapshot(T)['snapshot_id'] != bookmarked['snapshot_id']
+    assert store.snapshot(T)['records']['n1']['metadata']['uid']=='uid1'
