@@ -3,7 +3,7 @@ import json
 import pytest
 from dimaggi_receiver.topology import TopologyState
 from dimaggi_receiver.topology_watch import WatchStore
-from dimaggi_receiver.observations import _utc
+from dimaggi_receiver.observations import _utc, _digest
 from test_topology import event
 from test_topology_watch import listing
 
@@ -22,7 +22,7 @@ def test_fifty_day_snapshot_cannot_claim_2099_expiry(tmp_path, watch):
             assert _utc(store.snapshot(observed)['expires_at']) <= _utc(observed) + timedelta(seconds=300)
             value = store.snapshot(observed)
             value['expires_at'] = expiry
-            store.db.execute('UPDATE projection SET body=?', (json.dumps(value),))
+            store.db.execute('UPDATE projection SET body=?,digest=?', (json.dumps(value), _digest(value)))
             assert 'stale_or_future' in store.snapshot(now)['issues']
         finally:
             store.close()

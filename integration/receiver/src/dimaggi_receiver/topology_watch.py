@@ -7,6 +7,9 @@ not a claim that a disconnected watcher is current. SQLite serializes writers.
 from copy import deepcopy
 import json
 import sqlite3
+import re
+from pathlib import Path
+from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
 from .observations import _identifier, _utc, _digest
 
@@ -23,6 +26,8 @@ class WatchStore:
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.execute('PRAGMA synchronous=FULL')
         self.db.execute('CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
+        if 'digest' not in {row[1] for row in self.db.execute('PRAGMA table_info(projection)')}:
+            self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
         self.session = None
         self.transport_digest = None
         self._transaction(lambda prior: self._disconnect(prior))
@@ -38,11 +43,15 @@ class WatchStore:
     def _transaction(self, update):
         self.db.execute('BEGIN IMMEDIATE')
         try:
-            row = self.db.execute('SELECT body FROM projection WHERE id=1').fetchone()
-            value = update(json.loads(row[0]) if row else None)
+            row = self.db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
+            prior = json.loads(row[0]) if row else None
+            if row:
+                need(row[1] is None or row[1] == _digest(prior), 'watch integrity mismatch')
+                if row[1] is None: prior['resync_required'] = True
+            value = update(prior)
             if value is not None:
                 bounded(value)
-                self.db.execute('INSERT OR REPLACE INTO projection VALUES(1,?)', (json.dumps(value, sort_keys=True),))
+                self.db.execute('INSERT OR REPLACE INTO projection VALUES(1,?,?)', (json.dumps(value, sort_keys=True), _digest(value)))
             self.db.execute('COMMIT')
             return value
         except BaseException:
@@ -131,11 +140,37 @@ class WatchStore:
             raise
 
     def snapshot(self, now):
-        row = self.db.execute('SELECT body FROM projection WHERE id=1').fetchone()
+        row = self.db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
         need(row is not None, 'no topology collection')
-        value = json.loads(row[0]); issues = []
+        value = json.loads(row[0])
+        need(row[1] == _digest(value), 'watch integrity mismatch')
+        return _snapshot(value, now)
+
+
+def _snapshot(value, now):
+        issues = []
         if value['resync_required']: issues.append('resync_required')
         if not current(value['observed_at'], value['expires_at'], now): issues.append('stale_or_future')
         value.update(schema='dimaggi-kubernetes-watch/v1', issues=issues, execution_authorized=False)
         value['snapshot_id'] = _digest(value)
         return value
+
+
+def read_current(path, *, tenant, cluster, collection, namespace='', now):
+    """Read a current collector projection without taking ownership or creating it."""
+    try:
+        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro'
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            db.execute('BEGIN')
+            need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
+            row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
+            need(row is not None, 'no topology collection')
+            value = json.loads(row[0])
+            need(row[1] == _digest(value), 'watch integrity mismatch')
+            need(value['scope'] == [tenant, cluster, collection, namespace], 'watch scope mismatch')
+            result = _snapshot(value, now)
+            need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
+            need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')
+            return result
+    except (sqlite3.Error, KeyError, TypeError, OSError) as exc:
+        raise ValueError('current topology unavailable') from exc
