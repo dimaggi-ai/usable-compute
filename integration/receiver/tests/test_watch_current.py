@@ -36,7 +36,7 @@ def test_current_reader_closes_its_connection(tmp_path, monkeypatch):
     path=tmp_path/'watch.db'
     store=watch.WatchStore(path,'t','c','nodes')
     payload=listing();payload['metadata']['resourceVersion']='12'
-    store.relist(payload,T,E);store.close()
+    store.relist(payload,T,E)
     original=sqlite3.connect; opened=[]
     def connect(*args, **kwargs):
         connection=original(*args, **kwargs);opened.append(connection);return connection
@@ -44,3 +44,47 @@ def test_current_reader_closes_its_connection(tmp_path, monkeypatch):
     read(path)
     with pytest.raises(sqlite3.ProgrammingError,match='closed'):
         opened[0].execute('SELECT 1')
+    store.close()
+
+
+def test_closed_collector_is_not_current(tmp_path):
+    path = tmp_path/'watch.db'
+    store = watch.WatchStore(path, 't', 'c', 'nodes')
+    payload = listing(); payload['metadata']['resourceVersion'] = '12'
+    store.relist(payload, T, E)
+    store.close()
+    with pytest.raises(ValueError):
+        read(path)
+
+
+def test_crashed_collector_lease_expires(tmp_path, monkeypatch):
+    import time
+    path = tmp_path/'watch.db'
+    store = watch.WatchStore(path, 't', 'c', 'nodes')
+    payload = listing(); payload['metadata']['resourceVersion'] = '12'
+    store.relist(payload, T, E)
+    try:
+        assert read(path)['issues'] == []
+        future = time.time() + 46
+        monkeypatch.setattr(time, 'time', lambda: future)
+        with pytest.raises(ValueError):
+            read(path)
+    finally:
+        store.close()
+
+
+def test_heartbeat_refreshes_lease_and_future_clock_refuses(tmp_path, monkeypatch):
+    import time
+    path = tmp_path/'watch.db'
+    store = watch.WatchStore(path, 't', 'c', 'nodes')
+    payload = listing(); payload['metadata']['resourceVersion'] = '12'
+    store.relist(payload, T, E)
+    initial = time.time()
+    try:
+        monkeypatch.setattr(time, 'time', lambda: initial + 40)
+        store.heartbeat()
+        monkeypatch.setattr(time, 'time', lambda: initial + 50)
+        assert read(path)['issues'] == []
+        monkeypatch.setattr(time, 'time', lambda: initial)
+        with pytest.raises(ValueError): read(path)
+    finally: store.close()

@@ -59,6 +59,7 @@ def collect(store, config, *, expires_at, watch=False, clock=lambda: datetime.no
                 'resourceVersion':prior['resource_version'],'timeoutSeconds':max(1, config['timeout_seconds']-2)})
         else:
             path += '?limit=10000'
+        store.heartbeat()
         response = fetch(config, path)
         need(response['status'] == 200, 'resource version expired: relist required')
         from .observations import _utc

@@ -10,10 +10,15 @@ import json
 import sqlite3
 import re
 import sys
+import time
+import uuid
 from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
 from .observations import _identifier, _utc, _digest
+
+# Forty-five seconds permits the bounded 31-second TLS call plus scheduling slack.
+LEASE_SECONDS = 45
 
 KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'ResourceSlice'),
          'resourceclaims': ('resource.k8s.io/v1', 'ResourceClaim')}
@@ -33,6 +38,10 @@ class WatchStore:
         self.db.execute('CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
         if 'digest' not in {row[1] for row in self.db.execute('PRAGMA table_info(projection)')}:
             self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
+        self.owner_id = str(uuid.uuid4())
+        self.closed = False
+        self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
+        self.db.execute('INSERT OR REPLACE INTO lease VALUES(1,?,?,1)', (self.owner_id, time.time()))
         self.session = None
         self.transport_digest = None
         self._transaction(lambda prior: self._disconnect(prior))
@@ -43,7 +52,18 @@ class WatchStore:
             prior['resync_required'] = True
         return prior
 
-    def close(self): self.db.close()
+    def heartbeat(self):
+        row = self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1 AND owner=? AND live=1',
+                              (time.time(), self.owner_id))
+        need(row.rowcount == 1, 'collector lease lost')
+
+    def close(self):
+        if not self.closed:
+            try:
+                self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=?', (self.owner_id,))
+            finally:
+                self.closed = True
+                self.db.close()
 
     def _transaction(self, update):
         self.db.execute('BEGIN IMMEDIATE')
@@ -110,6 +130,7 @@ class WatchStore:
                         events=0, last_event=None, transport_digest=self.transport_digest)
         self._transaction(update)
         self.session = session
+        self.heartbeat()
 
     def apply(self, events, observed_at, expires_at):
         """Atomically accept an ordered bounded batch from the current TLS stream.
@@ -150,7 +171,9 @@ class WatchStore:
                 if events:
                     prior['observed_at'], prior['expires_at'] = observed_at, expires_at
                 return prior
-            return self._transaction(update)
+            result = self._transaction(update)
+            self.heartbeat()
+            return result
         except BaseException:
             self.fail()
             raise
@@ -178,6 +201,9 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
             db.execute('BEGIN')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
+            lease = db.execute('SELECT owner,heartbeat,live FROM lease WHERE id=1').fetchone()
+            need(lease is not None and lease[0] and lease[2] == 1
+                 and 0 <= time.time() - lease[1] < LEASE_SECONDS, 'collector lease closed or expired')
             row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
             need(row is not None, 'no topology collection')
             value = json.loads(row[0])
