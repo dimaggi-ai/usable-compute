@@ -83,9 +83,9 @@ def ofd_lock_spec():
     if sys.platform == 'darwin':
         return darwin_ofd_command(), struct.pack('@qqihh', 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET)
     import platform
-    if sys.platform != 'linux' or struct.calcsize('P') != 8 or platform.machine().lower() not in ('aarch64','arm64','x86_64','amd64'):
+    if sys.platform != 'linux' or struct.calcsize('P') != 8 or struct.calcsize('l') != 8 or platform.machine().lower() not in ('aarch64','arm64','x86_64','amd64'):
         raise ObservationError('file journals require qualified Linux or Darwin OFD locking')
-    command = getattr(fcntl, 'F_OFD_SETLK', None)
+    command = getattr(fcntl, 'F_OFD_SETLK', 37)
     if command != 37:
         raise ObservationError('Linux OFD locking constant unavailable or unexpected')
     # Linux asm-generic struct flock on the qualified LP64 ABIs: short type,
