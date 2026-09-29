@@ -215,8 +215,8 @@ def consume_supplied_batch(manifest_bytes, payload_bytes, trusted_profile, admis
     fresh = admit_supplied_batch(manifest_bytes, payload_bytes, trusted_profile)
     check(fresh["admission"] == "accepted_static", "consumer_admission_refused")
     check(type(admission_bytes) is bytes and same(load(admission_bytes), fresh), "consumer_result_mismatch")
-    check(isinstance(replay_store, ReplayStore), 'persistent_replay_store_required')
-    replay_store.claim_many([(manifest_bytes, payload_bytes)])
+    check(replay_store is None, 'caller_replay_store_refused')
+    claim_designated([(manifest_bytes, payload_bytes)])
     return load(payload_bytes)["rows"]
 
 
@@ -235,6 +235,9 @@ class ReplayStore:
         self.db = sqlite3.connect(uri, uri=True, timeout=5)
         self.db.execute('PRAGMA synchronous=FULL')
         if create:
+            import uuid
+            self.db.execute('CREATE TABLE registry (identity TEXT NOT NULL)')
+            self.db.execute('INSERT INTO registry VALUES(?)', (str(uuid.uuid4()),))
             self.db.execute('CREATE TABLE consumed (identity TEXT PRIMARY KEY)')
             self.db.commit()
         check(self.db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'replay_integrity')
@@ -262,3 +265,62 @@ class ReplayStore:
                 self.db.executemany('INSERT INTO consumed VALUES(?)', [(identity,) for identity in identities])
         except sqlite3.IntegrityError as exc:
             raise Refusal('cross_call_replay') from exc
+
+
+def _store_head(store):
+    identity = store.db.execute('SELECT identity FROM registry').fetchall()
+    check(len(identity) == 1, 'replay_identity_invalid')
+    rows = store.db.execute('SELECT identity FROM consumed ORDER BY rowid').fetchall()
+    head = sha(encode(['replay/v1', identity[0][0]]))
+    for position, row in enumerate(rows, 1):
+        head = sha(encode([head, position, row[0]]))
+    return {'identity': identity[0][0], 'head': head, 'count': len(rows)}
+
+
+def provision_replay_store(path, anchor):
+    """Owner-only setup; retain the anchor outside candidate-controlled storage."""
+    import os
+    from pathlib import Path
+    with ReplayStore(path, create=True) as store:
+        state = dict(path=str(Path(path).resolve()), **_store_head(store))
+    fd = os.open(anchor, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(encode(state)); stream.flush(); os.fsync(stream.fileno())
+    _sync_directory(Path(anchor).parent)
+    return state
+
+
+def _sync_directory(path):
+    import os
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def claim_designated(batches):
+    """Consume using evaluator configuration, never a store supplied with evidence."""
+    import os
+    import fcntl
+    import tempfile
+    from pathlib import Path
+    configured = os.environ.get('DIMAGGI_RSI_REPLAY_ANCHOR')
+    check(bool(configured), 'pinned_replay_store_required')
+    anchor = Path(configured)
+    # A separate lock survives atomic replacement of the anchor.
+    with open(str(anchor) + '.lock', 'a+b') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        state = load(anchor.read_bytes())
+        check(set(state) == {'path', 'identity', 'head', 'count'}, 'replay_anchor_invalid')
+        with ReplayStore(state['path']) as store:
+            check(_store_head(store) == {k: state[k] for k in ('identity', 'head', 'count')},
+                  'replay_anchor_mismatch')
+            ReplayStore.claim_many(store, batches)
+            updated = dict(path=state['path'], **_store_head(store))
+        fd, temporary = tempfile.mkstemp(dir=anchor.parent, prefix='.replay-anchor-')
+        try:
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(encode(updated)); stream.flush(); os.fsync(stream.fileno())
+            os.replace(temporary, anchor)
+            _sync_directory(anchor.parent)
+        finally:
+            Path(temporary).unlink(missing_ok=True)

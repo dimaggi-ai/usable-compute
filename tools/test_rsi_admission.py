@@ -66,8 +66,11 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual({x['id'] for x in r['checks'] if 'row_id' in x},
                          {'nonnegative_integer','unit_consistency','resource_conservation'})
         import tempfile
-        with tempfile.TemporaryDirectory() as directory, api.ReplayStore(Path(directory)/'replay.db', create=True) as store:
-            self.assertEqual(api.consume_supplied_batch(enc(self.m),enc(self.p),enc(self.t),enc(r), replay_store=store), self.p['rows'])
+        with tempfile.TemporaryDirectory() as directory:
+            anchor = Path(directory)/'anchor.json'
+            api.provision_replay_store(Path(directory)/'replay.db', anchor)
+            with patch.dict('os.environ', {'DIMAGGI_RSI_REPLAY_ANCHOR': str(anchor)}):
+                self.assertEqual(api.consume_supplied_batch(enc(self.m),enc(self.p),enc(self.t),enc(r)), self.p['rows'])
     def test_positive_zero_boundary(self):
         for q in self.p['rows'][0]['quantities'].values(): q['value']=0
         bind(self.m,self.p); self.call()

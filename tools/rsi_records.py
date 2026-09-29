@@ -316,9 +316,10 @@ def _assess_records(record, now=None):
 
 def assess(record, now=None, *, artifacts=None, replay_store=None):
     """Assess records only after admitting supplied evidence and consuming its identity."""
-    from rsi_admission import admit_supplied_batch, ReplayStore
+    from rsi_admission import admit_supplied_batch, claim_designated
     result = _assess_records(record, now)
-    if not artifacts or not isinstance(replay_store, ReplayStore):
+    require(replay_store is None, 'caller replay store refused')
+    if not artifacts:
         result['missing'].append('admitted evidence and persistent replay store required')
         result['recorded_gate'] = 'insufficient_evidence'
         result['useful_dispositions'] = 0
@@ -343,7 +344,7 @@ def assess(record, now=None, *, artifacts=None, replay_store=None):
             require(item['evidence_sha256'] == admitted['payload_sha256'], 'admission evidence digest mismatch')
         batches.append((supplied['manifest'], supplied['payload']))
     if result['recorded_gate'] == 'recorded_criteria_met':
-        replay_store.claim_many(batches)
+        claim_designated(batches)
     return result
 
 
