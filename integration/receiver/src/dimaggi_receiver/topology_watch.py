@@ -43,10 +43,27 @@ class WatchStore:
         self.owner_id = str(uuid.uuid4())
         self.closed = False
         self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
-        self.db.execute('INSERT OR REPLACE INTO lease VALUES(1,?,?,1)', (self.owner_id, time.time()))
+        if 'generation' not in {row[1] for row in self.db.execute('PRAGMA table_info(lease)')}:
+            self.db.execute('ALTER TABLE lease ADD COLUMN generation TEXT')
+        self.generation = str(uuid.uuid4())
         self.session = None
         self.transport_digest = None
-        self._transaction(lambda prior: self._disconnect(prior))
+        try:
+            self._transaction(self._acquire)
+        except BaseException:
+            self.db.close()
+            self.closed = True
+            raise
+
+    def _acquire(self, prior):
+        prior = self._disconnect(prior)
+        self.db.execute('INSERT OR REPLACE INTO lease VALUES(1,?,?,1,?)',
+                        (self.owner_id, time.time(), self.generation))
+        return prior
+
+    def _check_owner(self):
+        row = self.db.execute('SELECT owner,generation,live FROM lease WHERE id=1').fetchone()
+        need(row == (self.owner_id, self.generation, 1), 'collector lease lost')
 
     def _disconnect(self, prior):
         if prior:
@@ -70,6 +87,8 @@ class WatchStore:
     def _transaction(self, update):
         self.db.execute('BEGIN IMMEDIATE')
         try:
+            if update != self._acquire:
+                self._check_owner()
             row = self.db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
             prior = json.loads(row[0]) if row else None
             if row:
@@ -127,7 +146,7 @@ class WatchStore:
         session = str(uuid.uuid4())
         def update(prior):
             if prior: need(_utc(observed_at) >= _utc(prior['observed_at']), 'collection clock regressed')
-            return dict(scope=self.scope, session=session, resource_version=rv, records=records,
+            return dict(scope=self.scope, generation=self.generation, session=session, resource_version=rv, records=records,
                         observed_at=observed_at, expires_at=expires_at, resync_required=False,
                         events=0, last_event=None, transport_digest=self.transport_digest)
         self._transaction(update)
@@ -226,13 +245,14 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
             db.execute('BEGIN')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
-            lease = db.execute('SELECT owner,heartbeat,live FROM lease WHERE id=1').fetchone()
+            lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
             need(lease is not None and lease[0] and lease[2] == 1
                  and 0 <= time.time() - lease[1] < LEASE_SECONDS, 'collector lease closed or expired')
             row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
             need(row is not None, 'no topology collection')
             value = json.loads(row[0])
             need(row[1] == _digest(value), 'watch integrity mismatch')
+            need(value.get('generation') == lease[3] and lease[3], 'projection generation mismatch')
             need(value['scope'] == [tenant, cluster, collection, namespace], 'watch scope mismatch')
             result = _snapshot(value, now)
             need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
