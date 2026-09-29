@@ -141,6 +141,16 @@ class WatchStore:
         return wall, tick
 
     def _publish(self):
+        try:
+            self._publish_snapshot()
+        except BaseException:
+            # A failed publication must not leave the previous live lease exposed.
+            # If unlink also fails, propagate it and leave close retryable.
+            if self.path is not None:
+                Path(self.path).unlink(missing_ok=True)
+            raise
+
+    def _publish_snapshot(self):
         if self.path is None:
             return
         # Build on a new inode. Reader locks on any published inode can never
@@ -216,9 +226,14 @@ class WatchStore:
                 changed = self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=?', (self.owner_id,)).rowcount
                 if changed:
                     self._publish()
-            finally:
+            except BaseException:
+                if self.path is not None and Path(self.path).exists():
+                    raise
                 self.closed = True
                 self.db.close()
+                raise
+            self.closed = True
+            self.db.close()
 
     def _transaction(self, update):
         with _lease_lock(self.writer_path, writer=True):
