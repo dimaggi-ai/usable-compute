@@ -37,3 +37,20 @@ def test_second_snapshot_rederives_refusal(published, monkeypatch, change):
         return original(*args, **kwargs)
     monkeypatch.setattr(w, '_read_rows', changed)
     with pytest.raises(ValueError): read(path, ledger)
+
+
+def test_second_ledger_wait_cannot_extend_serving_cutoff(published, monkeypatch):
+    store, path, ledger = published
+    heartbeat = store.db.execute('SELECT heartbeat FROM lease').fetchone()[0]
+    original = w.check_generation
+    calls = 0
+    def wait(*args):
+        nonlocal calls
+        calls += 1
+        result = original(*args)
+        if calls == 2: monkeypatch.setattr(w.time, 'time', lambda: heartbeat+46)
+        return result
+    monkeypatch.setattr(w, 'check_generation', wait)
+    before = ledger.read_bytes()
+    with pytest.raises(ValueError, match='closed or expired'): read(path, ledger)
+    assert ledger.read_bytes() == before

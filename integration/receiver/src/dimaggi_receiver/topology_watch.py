@@ -492,6 +492,7 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
              'watch changed during reader verification')
         lease = second_lease
         check_generation(expiry_ledger, identity[0], scope, lease[3], True)
+        wall = time.time()
         need(lease[2] != 1 or wall - lease[1] >= -CLOCK_TOLERANCE_SECONDS,
              'collector heartbeat is in the future')
         need(lease[2] != 1 or published - lease[1] <= COMMIT_BOUND_SECONDS, 'collector publication exceeded bound')
