@@ -5,10 +5,16 @@ from dimaggi_receiver import topology_watch as watch
 from test_topology_watch import listing, T, E
 
 
+def ledger(path):
+    result = path.parent/'reader.ledger'
+    if not result.exists(): watch.initialize_expiry_ledger(result)
+    return result
+
+
 def read(path, now=None):
     from datetime import datetime, timezone
     if now is None: now = datetime.fromtimestamp(watch.time.time(), timezone.utc).isoformat().replace("+00:00", "Z")
-    return watch.read_current(path, tenant='t', cluster='c', collection='nodes', namespace='', now=now)
+    return watch.read_current(path, expiry_ledger=ledger(path), tenant='t', cluster='c', collection='nodes', namespace='', now=now)
 
 
 def test_read_current_is_read_only_consistent_and_fails_closed(tmp_path):
@@ -92,14 +98,14 @@ def test_heartbeat_refreshes_lease_and_future_clock_refuses(tmp_path, monkeypatc
     finally: store.close()
 
 
-def test_current_reader_refuses_readonly_database(tmp_path):
+def test_current_reader_accepts_readonly_database(tmp_path):
     path = tmp_path/'watch.db'
     store = watch.WatchStore(path, 't', 'c', 'nodes')
     payload = listing(); payload['metadata']['resourceVersion'] = '12'
     store.relist(payload, T, E)
     path.chmod(0o400)
     try:
-        with pytest.raises(ValueError): read(path)
+        assert read(path)['issues'] == []
     finally:
         path.chmod(0o600)
         store.close()

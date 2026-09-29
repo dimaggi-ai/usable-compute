@@ -1,3 +1,4 @@
+from test_watch_current import ledger
 """Fake-transport collection tests; no live Kubernetes qualification."""
 from datetime import datetime, timedelta, timezone
 import json
@@ -29,7 +30,7 @@ def test_fake_transport_collector_keeps_running(tmp_path, monkeypatch, mode):
             expiry = (clock()+timedelta(seconds=300)).isoformat().replace('+00:00','Z')
             snapshot = c.collect(s, config, expires_at=expiry, watch=tick>0, clock=clock)
             assert not snapshot['issues']
-            assert not w.read_current(tmp_path/'w.db', tenant='t', cluster='c', collection='nodes', now=clock().isoformat().replace('+00:00','Z'))['issues']
+            assert not w.read_current(tmp_path/'w.db', expiry_ledger=ledger(tmp_path/'w.db'), tenant='t', cluster='c', collection='nodes', now=clock().isoformat().replace('+00:00','Z'))['issues']
         assert sum('watch=true' not in path for path in calls) >= 3
     finally: s.close()
 
@@ -45,7 +46,7 @@ def test_fake_transport_refresh_finishes_before_old_projection_expires(tmp_path,
         elapsed[0] += 30
         if s.session is not None:
             # A concurrent reader must stay current while the relist is in flight.
-            assert not w.read_current(path, tenant='t', cluster='c', collection='nodes', now=clock().isoformat().replace('+00:00','Z'))['issues']
+            assert not w.read_current(path, expiry_ledger=ledger(path), tenant='t', cluster='c', collection='nodes', now=clock().isoformat().replace('+00:00','Z'))['issues']
         payload = listing(); payload['metadata']['resourceVersion'] = str(elapsed[0])
         return dict(status=200, body='' if 'watch=true' in url else json.dumps(payload))
     monkeypatch.setattr(c, 'fetch', fetch)

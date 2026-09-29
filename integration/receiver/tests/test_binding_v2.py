@@ -1,3 +1,4 @@
+from test_watch_current import ledger
 from copy import deepcopy
 import pytest
 from dimaggi_receiver.infrastructure import cpu_binding, plan, stamp
@@ -15,7 +16,7 @@ def live(tmp_path):
                   'items':[{'metadata':{'name':'host', 'uid':'host-uid', 'resourceVersion':'12'}}]},
                  '2026-09-20T12:00:00Z', '2026-09-20T12:03:00Z')
     def read():
-        return read_current(path, tenant='synthetic-tenant', cluster='synthetic-cluster', collection='nodes', now=NOW)
+        return read_current(path, expiry_ledger=ledger(path), tenant='synthetic-tenant', cluster='synthetic-cluster', collection='nodes', now=NOW)
     yield store, read
     store.close()
 

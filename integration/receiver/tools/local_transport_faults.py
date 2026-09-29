@@ -85,7 +85,7 @@ def run(a):
         if p["status"] != "compatible":
             raise ValueError("fresh compatible infrastructure required")
         from dimaggi_receiver.topology_watch import read_current
-        topology = read_current(host['WatchStore'], tenant=host['Tenant'],
+        topology = read_current(host['WatchStore'], expiry_ledger=host['ExpiryLedger'], tenant=host['Tenant'],
                                 cluster=host['Deployment']['ClusterID'], collection='nodes', now=now)
         binding = cpu_binding(registry, q, digest(registry), p, now,
                               topology=topology, tenant=host['Tenant'], node_uid=host['NodeUID'])

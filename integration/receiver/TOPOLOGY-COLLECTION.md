@@ -35,15 +35,28 @@ relist for that generation can make its projection current. Every projection
 write checks the lease owner and generation inside its transaction, so a displaced
 collector cannot overwrite or invalidate its successor's projection.
 
-`read_current(path, tenant=..., cluster=..., collection=..., namespace=..., now=...)`
+`read_current(path, expiry_ledger=..., tenant=..., cluster=..., collection=..., namespace=..., now=...)`
 uses one wall-clock sample for lease liveness and projection freshness. Caller
 `now` must be within two seconds of that sample; it does not control freshness.
-The reader requires write access to the existing database to record lease expiry.
-It never creates a missing store. Read-only storage fails closed.
+The reader opens the collector database read-only and never writes to it. Provision
+an expiry ledger once with `initialize_expiry_ledger(path)` as the evaluator
+identity, then supply that path explicitly on every read. There is no default
+location. The CLI requires `--expiry-ledger`; local fault configuration requires
+`ExpiryLedger`. Missing, unwritable or corrupt ledgers refuse reads. The ledger
+must be a regular file owned by the reader UID with mode 0600, one link and no
+symlink. Opening uses `O_NOFOLLOW`; validation and I/O use that same descriptor.
+Concurrent reads take no collector write reservation; ledger access uses a
+bounded exclusive file lock.
 
-`close()` closes the lease. A reader or collector that observes a future heartbeat
-or a heartbeat at least 45 seconds old durably closes that generation. A later
-wall-clock rollback cannot reopen it. Collectors also refuse renewal after
+Scope is checked before any ledger access. The ledger retains dead generations
+by store identity, scope and generation. A reader never revives a recorded dead
+generation, even if the clock rolls back or the collector rewrites that lease.
+Reader observations do not close the collector's lease. The collector independently
+refuses expired generations; a new acquisition still requires a new relist.
+
+`close()` closes the collector lease. A reader records a future heartbeat or one
+at least 45 seconds old as dead in its ledger; a collector durably closes its own
+lease on either observation. A later wall-clock rollback cannot undo either record. Collectors also refuse renewal after
 45 seconds of monotonic elapsed time since their last renewal. Recovery requires
 a new WatchStore acquisition and a new relist, not a heartbeat of the old lease.
 
@@ -54,8 +67,16 @@ by rollback cannot be remembered. A rollback before any expiry observation can
 extend a dead lease's apparent wall-clock lifetime if it lands after the last
 heartbeat; repeated corrections have no finite real-time detection bound for
 readers. A surviving collector's monotonic check prevents renewal after suspension,
-and a restarted collector always needs a new generation and relist. These checks
-assume the owner protects the database and clock; they do not detect a forged DB.
+and a restarted collector always needs a new generation and relist. Protect the collector database and its parent directory so the evaluator identity
+can read but cannot modify or replace them. The collector identity can forge
+unkeyed observations, store identities and generations. The evaluator identity
+can alter its own expiry ledger and process-local receipts; it cannot forge the
+collector database when OS permissions separate those identities. These checks
+are not a sandbox against arbitrary code in either trusted process. Protect the
+ledger directory too, retain the ledger over restarts, and never reset it to clear
+refusals. Restoring or deleting its history loses the rollback guarantee. A new
+ledger deployment requires retiring old collector generations and relisting.
+Clock integrity and physical truth remain trusted inputs.
 
 `collect` renews before each bounded TLS read. Quiet streams trigger a relist when
 the remaining inventory lifetime is at most twice the configured TLS timeout

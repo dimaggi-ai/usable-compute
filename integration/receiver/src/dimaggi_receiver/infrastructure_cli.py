@@ -1,4 +1,4 @@
-"""Installed infrastructure contracts; strict local inputs, no network or writes."""
+"""Installed infrastructure contracts; strict local inputs and reader-owned expiry ledger."""
 
 from . import infrastructure as infra
 from .jsonio import loads, read_file
@@ -30,6 +30,7 @@ def add_commands(commands):
             p.add_argument("--plan", required=True)
         if name == "infrastructure-cpu-binding":
             p.add_argument('--watch-store', required=True)
+            p.add_argument('--expiry-ledger', required=True)
             p.add_argument('--tenant', required=True)
             p.add_argument('--node-uid', required=True)
         if name == "infrastructure-reconcile":
@@ -61,7 +62,7 @@ def run(a):
         if planned != infra.plan(r, request, a.registry_digest, a.as_of) or planned['status'] != 'compatible':
             raise ValueError('a current reproducible compatible plan is required')
         pool = next(p for p in request['pools'] if p['id'] == planned['allocations'][0]['pool_id'])
-        topology = read_current(a.watch_store, tenant=a.tenant, cluster=pool['target_id'],
+        topology = read_current(a.watch_store, expiry_ledger=a.expiry_ledger, tenant=a.tenant, cluster=pool['target_id'],
                                 collection='nodes', namespace='', now=a.as_of)
         return infra.cpu_binding(r, request, a.registry_digest, planned, a.as_of,
                                  topology=topology, node_uid=a.node_uid, tenant=a.tenant)

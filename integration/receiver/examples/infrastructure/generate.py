@@ -14,7 +14,7 @@ from dimaggi_receiver.jsonio import digest, dumps
 def topology_fixture(now='2026-09-20T12:00:01Z'):
     import atexit
     from tempfile import TemporaryDirectory
-    from dimaggi_receiver.topology_watch import WatchStore, read_current
+    from dimaggi_receiver.topology_watch import WatchStore, read_current, initialize_expiry_ledger
     directory = TemporaryDirectory()
     atexit.register(directory.cleanup)
     path = Path(directory.name)/'watch.db'
@@ -23,7 +23,9 @@ def topology_fixture(now='2026-09-20T12:00:01Z'):
                   'items': [{'metadata': {'name': 'host', 'uid': 'host-uid', 'resourceVersion': '12'}}]},
                  '2026-09-20T12:00:00Z', '2026-09-20T12:05:00Z')
     store._transaction(lambda value: dict(value, session='synthetic-session'))
-    result = read_current(path, tenant='synthetic-tenant', cluster='synthetic-cluster', collection='nodes', now=now)
+    expiry_ledger = Path(directory.name)/'reader.ledger'
+    initialize_expiry_ledger(expiry_ledger)
+    result = read_current(path, expiry_ledger=expiry_ledger, tenant='synthetic-tenant', cluster='synthetic-cluster', collection='nodes', now=now)
     atexit.register(store.close)
     return result
 

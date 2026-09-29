@@ -20,7 +20,8 @@ def test_expiry_is_durable_across_rollback(tmp_path, observer):
                 else: s._relist(payload, T, E)
         with patch.object(w.time, 'time', return_value=start+1):
             with pytest.raises(ValueError): read(path)
-            with pytest.raises(ValueError): s.heartbeat()
+            if observer != 'reader':
+                with pytest.raises(ValueError): s.heartbeat()
             replacement = w.WatchStore(path, 't', 'c', 'nodes')
             with pytest.raises(ValueError): read(path)
             replacement.relist(payload, T, E)

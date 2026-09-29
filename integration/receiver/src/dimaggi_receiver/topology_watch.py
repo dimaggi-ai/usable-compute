@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
 from .observations import _identifier, _utc, _digest
+from .expiry_ledger import check_generation, initialize_expiry_ledger
 
 # Forty-five seconds permits the bounded 31-second TLS call plus scheduling slack.
 LEASE_SECONDS = 45
@@ -41,6 +42,8 @@ class WatchStore:
         self.db.execute('CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
         if 'digest' not in {row[1] for row in self.db.execute('PRAGMA table_info(projection)')}:
             self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
+        self.db.execute('CREATE TABLE IF NOT EXISTS store_identity (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL)')
+        self.db.execute('INSERT OR IGNORE INTO store_identity VALUES(1,?)', (str(uuid.uuid4()),))
         self.owner_id = str(uuid.uuid4())
         self.closed = False
         self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
@@ -236,49 +239,50 @@ class CurrentSnapshot(dict):
     """Process-local reader receipt; serialization does not preserve verification."""
 
 
-def _seal_snapshot(value, path):
+def _seal_snapshot(value, path, expiry_ledger):
     result = CurrentSnapshot(value)
     result._path = str(Path(path).resolve())
-    result._seal = hmac.digest(_READ_KEY, (result._path + _digest(value)).encode(), 'sha256')
+    result._expiry_ledger = str(Path(expiry_ledger).absolute())
+    result._seal = hmac.digest(_READ_KEY, (result._path + result._expiry_ledger + _digest(value)).encode(), 'sha256')
     return result
 
 
 def verified_snapshot(value, *, tenant, cluster, now):
     need(type(value) is CurrentSnapshot, 'verified WatchStore reader receipt required')
-    expected = hmac.digest(_READ_KEY, (value._path + _digest(dict(value))).encode(), 'sha256')
+    expected = hmac.digest(_READ_KEY, (value._path + value._expiry_ledger + _digest(dict(value))).encode(), 'sha256')
     need(hmac.compare_digest(value._seal, expected), 'modified WatchStore reader receipt')
-    fresh = read_current(value._path, tenant=tenant, cluster=cluster, collection='nodes', now=now)
+    fresh = read_current(value._path, expiry_ledger=value._expiry_ledger, tenant=tenant, cluster=cluster, collection='nodes', now=now)
     need(fresh == value, 'WatchStore changed since read')
     return fresh
 
 
-def read_current(path, *, tenant, cluster, collection, namespace='', now):
-    """Read without acquiring ownership; durably close observed expired leases."""
+def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace='', now):
+    """Read the collector database read-only; retain expiry in the reader ledger."""
     try:
-        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=rw'
+        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro'
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-            db.execute('BEGIN IMMEDIATE')
-            db.execute('UPDATE lease SET live=live WHERE id=1')
+            db.execute('BEGIN')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
-            lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
-            wall = time.time()
-            live = lease is not None and lease[0] and lease[2] == 1 and 0 <= wall - lease[1] < LEASE_SECONDS
-            if not live:
-                db.execute('UPDATE lease SET live=0 WHERE id=1')
-                db.commit()
-            need(live, 'collector lease closed or expired')
-            need(abs(_utc(now).timestamp() - wall) <= 2, 'reader clock differs from wall clock')
             row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
             need(row is not None, 'no topology collection')
             value = json.loads(row[0])
             need(row[1] == _digest(value), 'watch integrity mismatch')
-            need(value.get('generation') == lease[3] and lease[3], 'projection generation mismatch')
-            need(value['scope'] == [tenant, cluster, collection, namespace], 'watch scope mismatch')
+            scope = [tenant, cluster, collection, namespace]
+            need(value['scope'] == scope, 'watch scope mismatch')
+            lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
+            need(lease is not None and lease[0] and lease[3], 'collector lease missing')
+            need(value.get('generation') == lease[3], 'projection generation mismatch')
+            identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
+            need(identity is not None and type(identity[0]) is str and identity[0], 'store identity missing')
+            wall = time.time()
+            live = lease[2] == 1 and 0 <= wall - lease[1] < LEASE_SECONDS
+            check_generation(expiry_ledger, identity[0], scope, lease[3], live)
+            need(abs(_utc(now).timestamp() - wall) <= 2, 'reader clock differs from wall clock')
             result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
             need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
             need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')
-            return _seal_snapshot(result, path)
-    except (sqlite3.Error, KeyError, TypeError, OSError) as exc:
+            return _seal_snapshot(result, path, expiry_ledger)
+    except (sqlite3.Error, KeyError, TypeError, OSError, UnicodeError) as exc:
         raise ValueError('current topology unavailable') from exc
 
 
