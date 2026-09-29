@@ -36,8 +36,9 @@ write checks the lease owner and generation inside its transaction, so a displac
 collector cannot overwrite or invalidate its successor's projection.
 
 `read_current(path, expiry_ledger=..., tenant=..., cluster=..., collection=..., namespace=..., now=...)`
-uses one wall-clock sample for lease liveness and projection freshness. Caller
-`now` must be within two seconds of that sample; it does not control freshness.
+checks lease liveness before and after ledger access. The later wall-clock sample
+controls projection freshness; caller `now` must be within two seconds of it.
+The caller does not control freshness.
 The reader opens the collector database read-only and never writes to it. Provision
 an expiry ledger once with `initialize_expiry_ledger(path)` as the evaluator
 identity, then supply that path explicitly on every read. There is no default
@@ -46,7 +47,11 @@ location. The CLI requires `--expiry-ledger`; local fault configuration requires
 must be a regular file owned by the reader UID with mode 0600, one link and no
 symlink. Opening uses `O_NOFOLLOW`; validation and I/O use that same descriptor.
 Concurrent reads take no collector write reservation; ledger access uses a
-bounded exclusive file lock.
+bounded exclusive file lock. The reader ends its database transaction before
+waiting on the ledger lock or syncing the ledger. A second short read-only
+transaction compares the lease owner, heartbeat, live flag, generation, projection
+body and digest, and store identity with the first read. Any change refuses with
+`watch changed during reader verification`; retry from a fresh read.
 
 Scope is checked before any ledger access. The ledger retains dead generations
 by store identity, scope and generation. A reader never revives a recorded dead

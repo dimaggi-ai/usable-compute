@@ -281,12 +281,25 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
             need(value.get('generation') == lease[3], 'projection generation mismatch')
             identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
             need(identity is not None and type(identity[0]) is str and identity[0], 'store identity missing')
+            db.execute('COMMIT')
             wall = time.time()
             age = wall - lease[1]
             need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
                  'collector heartbeat is in the future')
             live = lease[2] == 1 and age < LEASE_SECONDS
             check_generation(expiry_ledger, identity[0], scope, lease[3], live)
+            # Ledger locking and fsync must not retain a collector database lock.
+            wall = time.time()
+            age = wall - lease[1]
+            need(age >= -CLOCK_TOLERANCE_SECONDS, 'collector heartbeat is in the future')
+            if age >= LEASE_SECONDS:
+                check_generation(expiry_ledger, identity[0], scope, lease[3], False)
+            db.execute('BEGIN')
+            need(db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone() == lease
+                 and db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone() == row
+                 and db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone() == identity,
+                 'watch changed during reader verification')
+            db.execute('COMMIT')
             need(abs(_utc(now).timestamp() - wall) <= CLOCK_TOLERANCE_SECONDS, 'reader clock differs from wall clock')
             result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
             need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
