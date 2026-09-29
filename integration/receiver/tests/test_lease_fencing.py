@@ -54,3 +54,18 @@ def test_generation_requires_its_own_relist(tmp_path):
         new.relist(payload, T, E)
         assert read(path)['issues'] == []
     finally: old.close(); new.close()
+
+
+def test_acquisition_rollback_preserves_prior_owner_and_projection(tmp_path):
+    path = tmp_path/'watch.db'; old, _ = live(path)
+    lease = old.db.execute('SELECT * FROM lease').fetchone()
+    projection = old.db.execute('SELECT * FROM projection').fetchone()
+    # Abort the projection invalidation after acquisition has attempted its write.
+    old.db.execute("CREATE TRIGGER reject_projection BEFORE INSERT ON projection BEGIN SELECT RAISE(ABORT, 'injected failure'); END")
+    import sqlite3
+    with pytest.raises(sqlite3.IntegrityError, match='injected failure'):
+        w.WatchStore(path, 't', 'c', 'nodes')
+    assert old.db.execute('SELECT * FROM lease').fetchone() == lease
+    assert old.db.execute('SELECT * FROM projection').fetchone() == projection
+    assert not read(path)['issues']
+    old.close()
