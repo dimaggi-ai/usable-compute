@@ -18,6 +18,11 @@ def test_evidence_ci_collects_all_pytest_functions():
                                 capture_output=True, text=True, timeout=15)
         assert result.returncode == 0, result.stderr + result.stdout
         collected += result.stdout
+    for name in ('test_records_v1_cannot_credit_unadmitted_references',
+                 'test_consumption_requires_persistent_replay_store',
+                 'test_records_invokes_admission_and_binds_scope',
+                 'test_records_admission_success_and_restart_replay_refusal'):
+        assert 'test_rsi_consumption.py::' + name in collected
     import ast
     for path in (root/'tools').glob('test_*.py'):
         for node in ast.parse(path.read_text()).body:
