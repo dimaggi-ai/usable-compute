@@ -47,3 +47,22 @@ for the public portfolio.
 
 [Cover strategy](COVER_STRATEGY.md): clear research copy, restrained illustrations,
 and proofreading checks.
+
+Topology leases require collector and reader clocks within 2 s. A collector clock
+lead of S seconds can leave a dead generation readable until S+45 s after its last
+heartbeat on an advancing reader clock. Reads refuse at exactly S+45 s. Persistent
+"heartbeat is in the future" refusals mean the clocks must be fixed before the
+reads are trusted.
+
+A future heartbeat on a live lease writes no tombstone;
+closed leases still do. Reads refuse at age 45 seconds, but ages from 45 through
+less than 47 seconds do not record expiry because a collector two seconds behind
+may still renew. Coherent age 47 or a closed lease permits a permanent tombstone.
+Collector and reader upgrades must be deployed together and old collectors
+restarted to use the cooperative sampling lock. See the topology collection
+profile for the transaction and clock assumptions.
+
+A provisioning fsync failure is an error even if the leftover ledger header
+parses. Do not adopt that residue as durably provisioned storage. Local source
+and gate results do not establish installed, crash, power-loss or physical
+guarantees.
