@@ -50,6 +50,7 @@ def test_generation_requires_its_own_relist(tmp_path):
         row = json.loads(new.db.execute('SELECT body FROM projection').fetchone()[0])
         row['resync_required'] = False
         new.db.execute('UPDATE projection SET body=?,digest=?', (json.dumps(row), w._digest(row)))
+        new._publish()
         with pytest.raises(ValueError): read(path)
         new.relist(payload, T, E)
         assert read(path)['issues'] == []

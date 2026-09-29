@@ -35,6 +35,7 @@ def test_read_current_is_read_only_consistent_and_fails_closed(tmp_path):
         row = json.loads(store.db.execute('SELECT body FROM projection').fetchone()[0])
         row['records']['n1']['metadata']['uid'] = 'replacement'
         store.db.execute('UPDATE projection SET body=?', (json.dumps(row),))
+        store._publish()
         with pytest.raises(ValueError): read(path)
     finally:
         store.close()

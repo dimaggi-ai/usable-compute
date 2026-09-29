@@ -19,22 +19,16 @@ with sqlite3.connect(sys.argv[1], timeout=0.1) as db:
     else:
         print('acquired')
         db.rollback()
-''', str(path)], capture_output=True, text=True, timeout=3, check=True)
+''', str(store.writer_path)], capture_output=True, text=True, timeout=3, check=True)
         assert result.stdout.strip() == 'blocked'
     finally:
         store.db.execute('ROLLBACK')
 
 
-def test_missing_sidecar_refuses_without_recording_expiry(state):
-    import pytest
+def test_missing_reader_sidecar_is_not_required(state):
     store, path, ledger, start = state
     sidecar = path.with_name(path.name+'.lease-lock')
-    retained = sidecar.with_suffix('.retained')
+    assert not sidecar.exists()
     before = ledger.read_bytes()
-    sidecar.rename(retained)
-    try:
-        with pytest.raises(ValueError, match='current topology unavailable'):
-            read(path, ledger)
-        assert ledger.read_bytes() == before
-    finally:
-        retained.rename(sidecar)
+    assert not read(path, ledger)['issues']
+    assert ledger.read_bytes() == before

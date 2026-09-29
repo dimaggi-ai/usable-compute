@@ -9,12 +9,13 @@ from test_clock_tolerance import iso
 @pytest.mark.parametrize('future', ['reader_step', 'heartbeat_rewrite'])
 def test_recorded_expiry_precedes_future_diagnostic(state, future):
     store, path, ledger, start = state
-    with patch.object(w.time, 'time', return_value=start+47):
+    with patch.object(w.time, 'time', return_value=start+57):
         with pytest.raises(ValueError, match='closed or expired'):
-            read(path, ledger, iso(start+47))
+            read(path, ledger, iso(start+57))
     before = ledger.read_bytes()
     if future == 'heartbeat_rewrite':
         store.db.execute('UPDATE lease SET heartbeat=?', (start+10,))
+        store._publish()
     wall = start-5 if future == 'reader_step' else start
     with patch.object(w.time, 'time', return_value=wall):
         with pytest.raises(ValueError, match='collector generation previously expired'):

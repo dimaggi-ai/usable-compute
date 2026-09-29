@@ -43,6 +43,8 @@ def test_exact_heartbeat_edges(state, edge, outside):
 def test_closed_future_lease_still_tombstones(state):
     store, path, ledger, start = state
     store.db.execute('UPDATE lease SET live=0, heartbeat=?', (start+10,))
+    store._publish()
     with pytest.raises(ValueError, match='closed or expired'): read(path, ledger)
     store.db.execute('UPDATE lease SET live=1, heartbeat=?', (start,))
+    store._publish()
     with pytest.raises(ValueError, match='previously expired'): read(path, ledger)

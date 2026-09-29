@@ -18,6 +18,7 @@ import time
 import uuid
 import hmac
 import secrets
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
@@ -27,6 +28,7 @@ from .expiry_ledger import check_generation, initialize_expiry_ledger
 # Forty-five seconds permits the bounded 31-second TLS call plus scheduling slack.
 LEASE_SECONDS = 45
 CLOCK_TOLERANCE_SECONDS = 2
+COMMIT_BOUND_SECONDS = 10
 
 KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'ResourceSlice'),
          'resourceclaims': ('resource.k8s.io/v1', 'ResourceClaim')}
@@ -34,12 +36,8 @@ KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'Reso
 
 @contextmanager
 def _lease_lock(path, *, writer=False):
-    # A separate trusted inode is essential: closing ANY descriptor for the
-    # database can drop SQLite's process-wide POSIX locks on that database.
-    # In rollback mode a SHARED SQL lock blocks commits, but not a writer that
-    # already checked its renewal and is waiting to commit. WAL readers can also
-    # see an older snapshot. Hold this lock before BEGIN through COMMIT on both
-    # sides, excluding pending renewals and starting even WAL snapshots fresh.
+    # Only collectors can traverse this private directory. Readers never open
+    # this inode or any of the writer database's SQLite lock-bearing files.
     if path is None:  # Private :memory: stores cannot be read by read_current.
         yield
         return
@@ -66,37 +64,54 @@ class WatchStore:
         need((collection == 'resourceclaims') == bool(namespace), 'claims require explicit namespace')
         if namespace: _identifier(namespace, 'namespace')
         self.path = None if str(path) == ':memory:' else str(Path(path).resolve())
+        self.writer_path = None
         if self.path is not None:
-            # Collector provisions an empty, reader-accessible coordination file.
-            # Keep it with the trusted database; never replace it while in use.
+            directory = Path(self.path + '.collector')
             try:
-                fd = os.open(self.path + '.lease-lock', os.O_RDONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+                directory.mkdir(mode=0o700)
+                directory.chmod(0o700)
             except FileExistsError:
                 pass
-            else:
-                try:
-                    os.fchmod(fd, 0o644)
-                finally:
-                    os.close(fd)
-        self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
-        self.db.execute('PRAGMA synchronous=FULL')
-        if sys.platform == 'darwin':
-            self.db.execute('PRAGMA fullfsync=ON')
-            self.db.execute('PRAGMA checkpoint_fullfsync=ON')
-        self.db.execute('CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
-        if 'digest' not in {row[1] for row in self.db.execute('PRAGMA table_info(projection)')}:
-            self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
-        self.db.execute('CREATE TABLE IF NOT EXISTS store_identity (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL)')
-        self.db.execute('INSERT OR IGNORE INTO store_identity VALUES(1,?)', (str(uuid.uuid4()),))
-        self.owner_id = str(uuid.uuid4())
-        self.closed = False
-        self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
-        if 'generation' not in {row[1] for row in self.db.execute('PRAGMA table_info(lease)')}:
-            self.db.execute('ALTER TABLE lease ADD COLUMN generation TEXT')
-        self.generation = str(uuid.uuid4())
-        self.last_tick = time.monotonic()
-        self.session = None
-        self.transport_digest = None
+            info = directory.lstat()
+            need(stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o700
+                 and info.st_uid == os.geteuid(), 'private collector directory required')
+            self.writer_path = str(directory / 'writer.db')
+            fd = os.open(self.writer_path + '.lease-lock',
+                         os.O_RDONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            os.fchmod(fd, 0o600)
+            os.close(fd)
+        with _lease_lock(self.writer_path, writer=True):
+            migrate = self.writer_path is not None and not Path(self.writer_path).exists() and Path(self.path).exists()
+            self.db = sqlite3.connect(self.writer_path or ':memory:', timeout=5, isolation_level=None)
+            if self.writer_path is not None:
+                os.chmod(self.writer_path, 0o600)
+            if migrate:
+                uri = 'file:' + quote(self.path, safe='/') + '?mode=ro'
+                with closing(sqlite3.connect(uri, uri=True, timeout=5)) as prior:
+                    prior.backup(self.db)
+            self.db.execute('PRAGMA journal_mode=WAL')
+            self.db.execute('PRAGMA synchronous=FULL')
+            if sys.platform == 'darwin':
+                self.db.execute('PRAGMA fullfsync=ON')
+                self.db.execute('PRAGMA checkpoint_fullfsync=ON')
+            self.db.execute('CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
+            if 'digest' not in {row[1] for row in self.db.execute('PRAGMA table_info(projection)')}:
+                self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
+            self.db.execute('CREATE TABLE IF NOT EXISTS store_identity (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL)')
+            self.db.execute('INSERT OR IGNORE INTO store_identity VALUES(1,?)', (str(uuid.uuid4()),))
+            self.db.execute('CREATE TABLE IF NOT EXISTS publication_protocol (version INTEGER NOT NULL)')
+            self.db.execute('DELETE FROM publication_protocol')
+            self.db.execute('INSERT INTO publication_protocol VALUES(1)')
+            self.owner_id = str(uuid.uuid4())
+            self.closed = False
+            self.lost = False
+            self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
+            if 'generation' not in {row[1] for row in self.db.execute('PRAGMA table_info(lease)')}:
+                self.db.execute('ALTER TABLE lease ADD COLUMN generation TEXT')
+            self.generation = str(uuid.uuid4())
+            self.last_tick = time.monotonic()
+            self.session = None
+            self.transport_digest = None
         try:
             self._transaction(self._acquire)
         except BaseException:
@@ -111,16 +126,65 @@ class WatchStore:
         return prior
 
     def _check_owner(self):
+        need(not self.lost, 'collector lease lost')
+        tick = time.monotonic()
         row = self.db.execute('SELECT owner,generation,live,heartbeat FROM lease WHERE id=1').fetchone()
         need(row is not None and row[:2] == (self.owner_id, self.generation), 'collector lease lost')
-        wall, tick = time.time(), time.monotonic()
+        wall = time.time()
         valid = row[2] == 1 and -CLOCK_TOLERANCE_SECONDS <= wall - row[3] < LEASE_SECONDS
         valid = valid and 0 <= tick - self.last_tick < LEASE_SECONDS
         if not valid:
             self.db.execute('UPDATE lease SET live=0 WHERE id=1')
             self.db.execute('COMMIT')
+            self._publish()
             need(False, 'collector lease closed or expired')
         return wall, tick
+
+    def _publish(self):
+        if self.path is None:
+            return
+        # Build on a new inode. Reader locks on any published inode can never
+        # conflict with backup, checkpoint, fsync or replacement of this file.
+        target = Path(self.path)
+        info = target.stat() if target.exists() else None
+        fd, temporary = tempfile.mkstemp(prefix='.watch-', dir=target.parent)
+        try:
+            os.fchmod(fd, 0o600)
+            with closing(sqlite3.connect(temporary, isolation_level=None)) as copy:
+                self.db.backup(copy)
+                copy.execute('PRAGMA journal_mode=DELETE')
+            if info is not None:
+                os.fchown(fd, -1, info.st_gid)
+                os.fchmod(fd, stat.S_IMODE(info.st_mode) & 0o777)
+            # A newly provisioned projection starts private (0600). Grant the
+            # reader group access explicitly, then replacements retain it.
+            os.fsync(fd)
+            os.replace(temporary, target)
+            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            os.close(fd)
+            Path(temporary).unlink(missing_ok=True)
+
+    def _commit_checked(self, wall, tick):
+        try:
+            self.db.execute('COMMIT')
+            self._publish()
+            need(0 <= time.monotonic() - tick <= COMMIT_BOUND_SECONDS
+                 and 0 <= time.time() - wall <= COMMIT_BOUND_SECONDS, 'collector lease lost')
+        except BaseException:
+            # Mark lost before cleanup: even a failed close cannot authorize this
+            # object again. Wall elapsed also detects a forward clock step.
+            self.lost = True
+            if self.db.in_transaction:
+                self.db.execute('ROLLBACK')
+            self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=? AND generation=?',
+                            (self.owner_id, self.generation))
+            self._publish()
+            raise
 
     def _disconnect(self, prior):
         if prior:
@@ -129,7 +193,7 @@ class WatchStore:
         return prior
 
     def heartbeat(self):
-        with _lease_lock(self.path, writer=True):
+        with _lease_lock(self.writer_path, writer=True):
             self.db.execute('BEGIN IMMEDIATE')
             try:
                 wall, tick = self._check_owner()
@@ -137,8 +201,9 @@ class WatchStore:
                 if not 0 <= time.monotonic() - self.last_tick < LEASE_SECONDS:
                     self.db.execute('UPDATE lease SET live=0 WHERE id=1')
                     self.db.execute('COMMIT')
+                    self._publish()
                     need(False, 'collector lease closed or expired')
-                self.db.execute('COMMIT')
+                self._commit_checked(wall, tick)
                 self.last_tick = tick
             except BaseException:
                 if self.db.in_transaction: self.db.execute('ROLLBACK')
@@ -146,19 +211,23 @@ class WatchStore:
 
     def close(self):
         if self.closed: return
-        with _lease_lock(self.path, writer=True):
+        with _lease_lock(self.writer_path, writer=True):
             try:
-                self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=?', (self.owner_id,))
+                changed = self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=?', (self.owner_id,)).rowcount
+                if changed:
+                    self._publish()
             finally:
                 self.closed = True
                 self.db.close()
 
     def _transaction(self, update):
-        with _lease_lock(self.path, writer=True):
+        with _lease_lock(self.writer_path, writer=True):
             self.db.execute('BEGIN IMMEDIATE')
             try:
+                tick = time.monotonic()
+                wall = time.time()
                 if update != self._acquire:
-                    self._check_owner()
+                    wall, tick = self._check_owner()
                 row = self.db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
                 prior = json.loads(row[0]) if row else None
                 if row:
@@ -168,7 +237,7 @@ class WatchStore:
                 if value is not None:
                     bounded(value)
                     self.db.execute('INSERT OR REPLACE INTO projection VALUES(1,?,?)', (json.dumps(value, sort_keys=True), _digest(value)))
-                self.db.execute('COMMIT')
+                self._commit_checked(wall, tick)
                 return value
             except BaseException:
                 if self.db.in_transaction: self.db.execute('ROLLBACK')
@@ -309,62 +378,61 @@ def verified_snapshot(value, *, tenant, cluster, now):
     return fresh
 
 
+def _read_rows(path, *, integrity=False):
+    # Sample before opening the snapshot, not after slow validation. Publication
+    # can replace this inode while it is being read; its contents never change.
+    before = time.time()
+    uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro&immutable=1'
+    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+        db.execute('BEGIN')
+        need(db.execute('SELECT version FROM publication_protocol').fetchall() == [(1,)],
+             'collector publication protocol required')
+        if integrity:
+            need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
+        row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
+        lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
+        identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
+        wall = time.time()
+        db.execute('COMMIT')
+    return before, wall, row, lease, identity
+
+
 def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace='', now):
-    """Read the collector database read-only; retain expiry in the reader ledger."""
+    """Read the published snapshot; retain expiry in the reader's own ledger."""
     try:
-        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro'
-        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-            with _lease_lock(Path(path).resolve()):
-                db.execute('BEGIN')
-                need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
-                row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
-                need(row is not None, 'no topology collection')
-                value = json.loads(row[0])
-                need(row[1] == _digest(value), 'watch integrity mismatch')
-                scope = [tenant, cluster, collection, namespace]
-                need(value['scope'] == scope, 'watch scope mismatch')
-                lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
-                need(lease is not None and lease[0] and lease[3], 'collector lease missing')
-                need(value.get('generation') == lease[3], 'projection generation mismatch')
-                identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
-                need(identity is not None and type(identity[0]) is str and identity[0], 'store identity missing')
-                # Sample while this is the latest committed lease. New databases
-                # default to DELETE journal mode; the cooperative lock also makes
-                # existing WAL databases coherent without taking a write reservation.
-                wall = time.time()
-                age = wall - lease[1]
-                dead = lease[2] != 1 or age >= LEASE_SECONDS + CLOCK_TOLERANCE_SECONDS
-                db.execute('COMMIT')
-            # Recorded death takes diagnostic priority, even after clock rollback.
-            check_generation(expiry_ledger, identity[0], scope, lease[3], True)
-            need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
-                 'collector heartbeat is in the future')
-            # For age-based death the collector's own age is >=45 (skew <=2),
-            # with no checked renewal pending. Closed leases cannot renew either.
-            # That decision survives releasing both locks before ledger wait/fsync.
-            if dead:
-                check_generation(expiry_ledger, identity[0], scope, lease[3], False)
-            need(age < LEASE_SECONDS, 'collector lease closed or expired')
-            with _lease_lock(Path(path).resolve()):
-                db.execute('BEGIN')
-                need(db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone() == lease
-                     and db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone() == row
-                     and db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone() == identity,
-                     'watch changed during reader verification')
-                wall = time.time()
-                age = wall - lease[1]
-                dead = age >= LEASE_SECONDS + CLOCK_TOLERANCE_SECONDS
-                db.execute('COMMIT')
-            # Changed snapshots above only refuse; they never write the ledger.
-            if dead:
-                check_generation(expiry_ledger, identity[0], scope, lease[3], False)
-            need(age >= -CLOCK_TOLERANCE_SECONDS, 'collector heartbeat is in the future')
-            need(age < LEASE_SECONDS, 'collector lease closed or expired')
-            need(abs(_utc(now).timestamp() - wall) <= CLOCK_TOLERANCE_SECONDS, 'reader clock differs from wall clock')
-            result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
-            need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
-            need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')
-            return _seal_snapshot(result, path, expiry_ledger)
+        before, wall, row, lease, identity = _read_rows(path, integrity=True)
+        need(row is not None, 'no topology collection')
+        value = json.loads(row[0])
+        need(row[1] == _digest(value), 'watch integrity mismatch')
+        scope = [tenant, cluster, collection, namespace]
+        need(value['scope'] == scope, 'watch scope mismatch')
+        need(lease is not None and lease[0] and lease[3], 'collector lease missing')
+        need(value.get('generation') == lease[3], 'projection generation mismatch')
+        need(identity is not None and type(identity[0]) is str and identity[0], 'store identity missing')
+        cutoff = LEASE_SECONDS + CLOCK_TOLERANCE_SECONDS + COMMIT_BOUND_SECONDS
+        age = wall - lease[1]
+        dead = lease[2] != 1 or before - lease[1] >= cutoff
+        check_generation(expiry_ledger, identity[0], scope, lease[3], True)
+        need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
+             'collector heartbeat is in the future')
+        if dead:
+            check_generation(expiry_ledger, identity[0], scope, lease[3], False)
+        need(lease[2] == 1 and age < LEASE_SECONDS, 'collector lease closed or expired')
+        # Reopen the published pathname: an existing connection stays on its old
+        # inode after replacement. Compare raw bytes before any second death claim.
+        before, wall, second_row, second_lease, second_identity = _read_rows(path)
+        need((second_row, second_lease, second_identity) == (row, lease, identity),
+             'watch changed during reader verification')
+        age = wall - lease[1]
+        if before - lease[1] >= cutoff:
+            check_generation(expiry_ledger, identity[0], scope, lease[3], False)
+        need(age >= -CLOCK_TOLERANCE_SECONDS, 'collector heartbeat is in the future')
+        need(age < LEASE_SECONDS, 'collector lease closed or expired')
+        need(abs(_utc(now).timestamp() - wall) <= CLOCK_TOLERANCE_SECONDS, 'reader clock differs from wall clock')
+        result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
+        need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
+        need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')
+        return _seal_snapshot(result, path, expiry_ledger)
     except (sqlite3.Error, KeyError, TypeError, OSError, UnicodeError) as exc:
         raise ValueError('current topology unavailable') from exc
 

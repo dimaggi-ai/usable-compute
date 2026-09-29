@@ -12,7 +12,8 @@ def test_heartbeat_keeps_owner_check_wall_sample(tmp_path):
         store, _ = live(tmp_path/'w.db')
     try:
         with patch.object(w.time, 'time', side_effect=[start+10, start+100]), patch.object(w.time, 'monotonic', return_value=1010):
-            store.heartbeat()
+            with pytest.raises(ValueError, match='lease lost'):
+                store.heartbeat()
         assert store.db.execute('SELECT heartbeat FROM lease').fetchone()[0] == start+10
         with patch.object(w.time, 'time', return_value=start+100):
             with pytest.raises(ValueError): read(tmp_path/'w.db')

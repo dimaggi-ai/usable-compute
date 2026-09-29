@@ -54,13 +54,22 @@ heartbeat on an advancing reader clock. Reads refuse at exactly S+45 s. Persiste
 "heartbeat is in the future" refusals mean the clocks must be fixed before the
 reads are trusted.
 
-A future heartbeat on a live lease writes no tombstone;
-closed leases still do. Reads refuse at age 45 seconds, but ages from 45 through
-less than 47 seconds do not record expiry because a collector two seconds behind
-may still renew. Coherent age 47 or a closed lease permits a permanent tombstone.
-Collector and reader upgrades must be deployed together and old collectors
-restarted to use the cooperative sampling lock. See the topology collection
-profile for the transaction and clock assumptions.
+A future heartbeat on a live lease writes no tombstone; closed leases still do.
+Reads refuse at age 45 seconds. The band from 45 through less than 57 seconds
+refuses without recording death. Permanent expiry requires a closed lease or
+age 57 measured before opening the snapshot. Each lease acquisition, heartbeat
+or projection write must commit and publish within 10 seconds of its validity
+check; a late operation
+abandons its generation and needs a restart and relist.
+
+The collector uses a private WAL database inside a collector-owned 0700 directory
+and atomically publishes a complete read-only snapshot. The snapshot starts at
+0600; replacements retain its mode and group. Readers need no WAL/SHM files or
+public lock sidecar. Shared locks on a published snapshot cannot block collector
+writes. Use distinct reader/collector identities and protect the parent directory;
+CPU and storage saturation remain environmental limits. Upgrade both components
+and restart old collectors together. See the topology collection profile for the
+storage layout, migration and clock assumptions.
 
 A provisioning fsync failure is an error even if the leftover ledger header
 parses. Do not adopt that residue as durably provisioned storage. Local source

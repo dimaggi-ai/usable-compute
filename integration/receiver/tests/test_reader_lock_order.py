@@ -22,18 +22,19 @@ def test_ledger_wait_does_not_block_collector(state, monkeypatch, stall):
     monkeypatch.setattr(w, 'check_generation', check)
     if stall == 'fsync':
         main_thread = threading.get_ident()
-        monkeypatch.setattr(w.time, 'time', lambda: start if threading.get_ident() == main_thread else start+47)
+        monkeypatch.setattr(w.time, 'time', lambda: start if threading.get_ident() == main_thread else start+57)
         fsync = expiry_ledger.os.fsync
         def stalled_sync(fd):
-            entered.set()
-            assert release.wait(3)
+            if threading.get_ident() != main_thread:
+                entered.set()
+                assert release.wait(3)
             return fsync(fd)
         monkeypatch.setattr(expiry_ledger.os, 'fsync', stalled_sync)
     # A short writer timeout makes any retained reader transaction observable.
     store.db.execute('PRAGMA busy_timeout=200')
     with ledger.open('r+') as holder, concurrent.futures.ThreadPoolExecutor(1) as pool:
         if stall == 'lock': fcntl.flock(holder, fcntl.LOCK_EX)
-        job = pool.submit(read, path, ledger, iso(start+47) if stall == 'fsync' else iso(start))
+        job = pool.submit(read, path, ledger, iso(start+57) if stall == 'fsync' else iso(start))
         try:
             assert entered.wait(2)
             began = time.perf_counter()
@@ -57,11 +58,14 @@ def test_changed_database_during_ledger_step_refuses(state, monkeypatch, change)
         original(*args)
         if change == 'digest':
             store.db.execute("UPDATE projection SET digest='changed'")
+            store._publish()
         elif change == 'identity':
             store.db.execute("UPDATE store_identity SET identity='changed'")
+            store._publish()
         else:
             replacement = {'owner': 'other', 'heartbeat': start+1, 'live': 0, 'generation': 'other'}[change]
             store.db.execute(f'UPDATE lease SET {change}=?', (replacement,))
+            store._publish()
     monkeypatch.setattr(w, 'check_generation', check)
     with pytest.raises(ValueError, match='watch changed during reader verification'):
         read(path, ledger)

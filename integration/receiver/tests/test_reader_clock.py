@@ -16,6 +16,7 @@ def test_older_caller_now_cannot_refresh_projection(tmp_path, offset):
         with patch.object(w.time, 'time', return_value=start+offset):
             # A healthy lease does not make an expired projection current.
             s.db.execute('UPDATE lease SET heartbeat=?', (start+offset,))
+            s._publish()
             with pytest.raises(ValueError):
                 w.read_current(tmp_path/'w.db', expiry_ledger=ledger(tmp_path/'w.db'), tenant='t', cluster='c', collection='nodes', now=T)
     finally: s.close()
@@ -27,6 +28,7 @@ def test_tolerated_now_does_not_control_freshness(tmp_path):
     try:
         with patch.object(w.time, 'time', return_value=start+60):
             s.db.execute('UPDATE lease SET heartbeat=?', (start+60,))
+            s._publish()
             old = datetime.fromtimestamp(start+59, timezone.utc).isoformat().replace('+00:00','Z')
             with pytest.raises(ValueError):
                 w.read_current(tmp_path/'w.db', expiry_ledger=ledger(tmp_path/'w.db'), tenant='t', cluster='c', collection='nodes', now=old)

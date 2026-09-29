@@ -51,7 +51,7 @@ def test_atomic_batch_and_restart(tmp_path):
     s.close()
 
 def test_new_owner_invalidates_old_stream(store):
-    path=store.db.execute('PRAGMA database_list').fetchone()[2]
+    path=store.path
     other=WatchStore(path,'tenant','cluster','nodes')
     try:
         other.relist(listing(),T,E)
