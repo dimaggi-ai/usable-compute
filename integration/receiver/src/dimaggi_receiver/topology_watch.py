@@ -89,6 +89,10 @@ class WatchStore:
                 uri = 'file:' + quote(self.path, safe='/') + '?mode=ro'
                 with closing(sqlite3.connect(uri, uri=True, timeout=5)) as prior:
                     prior.backup(self.db)
+            if self.path is not None:
+                Path(self.path + '.lease-lock').unlink(missing_ok=True)
+                self._remove_public_journals()
+                self._clean_temporary_copies()
             self.db.execute('PRAGMA journal_mode=WAL')
             self.db.execute('PRAGMA synchronous=FULL')
             if sys.platform == 'darwin':
@@ -140,6 +144,34 @@ class WatchStore:
             need(False, 'collector lease closed or expired')
         return wall, tick
 
+    def _remove_public_journals(self):
+        for suffix in ('-wal', '-shm', '-journal'):
+            Path(self.path + suffix).unlink(missing_ok=True)
+
+    def _temporary_prefix(self):
+        return '.watch-' + uuid.uuid5(uuid.NAMESPACE_URL, self.path).hex + '-'
+
+    def _clean_temporary_copies(self):
+        for path in Path(self.path).parent.glob('.watch-*'):
+            if re.match(r'\.watch-[0-9a-f]{32}-', path.name) and not path.name.startswith(self._temporary_prefix()):
+                continue
+            try:
+                info = path.lstat()
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
+                    continue
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                try:
+                    # Other stores may publish in this directory concurrently.
+                    # Never wait for their temporary inode; clean crash residue only.
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    current = os.fstat(fd)
+                    if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
+                        path.unlink(missing_ok=True)
+                finally:
+                    os.close(fd)
+            except (FileNotFoundError, BlockingIOError):
+                continue
+
     def _publish(self):
         try:
             self._publish_snapshot()
@@ -157,18 +189,20 @@ class WatchStore:
         # conflict with backup, checkpoint, fsync or replacement of this file.
         target = Path(self.path)
         info = target.stat() if target.exists() else None
-        fd, temporary = tempfile.mkstemp(prefix='.watch-', dir=target.parent)
+        fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=target.parent)
         try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.fchmod(fd, 0o600)
             with closing(sqlite3.connect(temporary, isolation_level=None)) as copy:
                 self.db.backup(copy)
                 copy.execute('PRAGMA journal_mode=DELETE')
+            os.fsync(fd)
             if info is not None:
                 os.fchown(fd, -1, info.st_gid)
                 os.fchmod(fd, stat.S_IMODE(info.st_mode) & 0o777)
             # A newly provisioned projection starts private (0600). Grant the
             # reader group access explicitly, then replacements retain it.
-            os.fsync(fd)
+            self._remove_public_journals()
             os.replace(temporary, target)
             directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
