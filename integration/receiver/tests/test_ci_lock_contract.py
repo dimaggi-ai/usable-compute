@@ -23,3 +23,13 @@ def test_macos_ci_has_no_unhashed_network_install():
     build=next(step['run'] for step in steps if step.get('name') == 'Build and install wheel')
     assert 'qualify_offline.sh' in build
     assert 'requirements-darwin-arm64-py312.lock' in build
+
+
+def test_every_workflow_network_install_requires_hashes():
+    for path in (ROOT/'.github/workflows').glob('*.yml'):
+        value=yaml.safe_load(path.read_text())
+        for job in value['jobs'].values():
+            for step in job['steps']:
+                for line in step.get('run','').splitlines():
+                    if 'pip install' in line or 'pip download' in line:
+                        assert '--require-hashes' in line, (path.name,line)
