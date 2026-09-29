@@ -27,16 +27,16 @@ def test_expiry_band_and_permanent_edge(state, monkeypatch, age):
 def test_renewal_before_first_wall_sample(state, monkeypatch, journal):
     store, path, ledger, start = state
     assert store.db.execute('PRAGMA journal_mode='+journal).fetchone()[0] == journal
-    original = sqlite3.connect
+    original = w.os.open
     fired = False
-    # Renew just before the reader establishes its first SQL snapshot.
-    def connect(*args, **kwargs):
+    # Renew before the descriptor pins the reader's first snapshot.
+    def open_snapshot(*args, **kwargs):
         nonlocal fired
-        if not fired:
+        if not fired and str(args[0]) == str(path):
             fired = True
             with patch.object(w.time, 'time', return_value=start+44.5): store.heartbeat()
         return original(*args, **kwargs)
-    monkeypatch.setattr(sqlite3, 'connect', connect)
+    monkeypatch.setattr(w.os, 'open', open_snapshot)
     monkeypatch.setattr(w.time, 'time', lambda: start+45.1)
     assert not read(path, ledger, iso(start+45.1))['issues']
     assert ledger.read_text().count('\n') == 1

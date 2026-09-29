@@ -234,6 +234,7 @@ class WatchStore:
                     need(row[1] is None or row[1] == _digest(prior), 'watch integrity mismatch')
                     if row[1] is None: prior['resync_required'] = True
                 value = update(prior)
+                self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1', (wall,))
                 if value is not None:
                     bounded(value)
                     self.db.execute('INSERT OR REPLACE INTO projection VALUES(1,?,?)', (json.dumps(value, sort_keys=True), _digest(value)))
@@ -382,25 +383,38 @@ def _read_rows(path, *, integrity=False):
     # Sample before opening the snapshot, not after slow validation. Publication
     # can replace this inode while it is being read; its contents never change.
     before = time.time()
-    uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro&immutable=1'
-    with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-        db.execute('BEGIN')
-        need(db.execute('SELECT version FROM publication_protocol').fetchall() == [(1,)],
-             'collector publication protocol required')
-        if integrity:
-            need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
-        row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
-        lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
-        identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
-        wall = time.time()
-        db.execute('COMMIT')
-    return before, wall, row, lease, identity
+    need(sys.platform == 'linux', 'kernel publication evidence unavailable')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        need(stat.S_ISREG(info.st_mode), 'regular snapshot required')
+        uri = 'file:/proc/self/fd/' + str(fd) + '?mode=ro&immutable=1'
+        with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
+            db.execute('BEGIN')
+            need(db.execute('SELECT version FROM publication_protocol').fetchall() == [(1,)],
+                 'collector publication protocol required')
+            if integrity:
+                need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
+            row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
+            lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
+            identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
+            wall = time.time()
+            db.execute('COMMIT')
+        # SQLite may canonicalize the procfs link. With fresh-inode publication,
+        # this comparison also excludes replacement during canonicalization/open.
+        current_inode = os.stat(path, follow_symlinks=False)
+        need((info.st_dev, info.st_ino) == (current_inode.st_dev, current_inode.st_ino),
+             'watch changed during reader verification')
+        published = os.fstat(fd).st_ctime
+    finally:
+        os.close(fd)
+    return before, wall, row, lease, identity, published
 
 
 def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace='', now):
     """Read the published snapshot; retain expiry in the reader's own ledger."""
     try:
-        before, wall, row, lease, identity = _read_rows(path, integrity=True)
+        before, wall, row, lease, identity, published = _read_rows(path, integrity=True)
         need(row is not None, 'no topology collection')
         value = json.loads(row[0])
         need(row[1] == _digest(value), 'watch integrity mismatch')
@@ -415,14 +429,17 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
         check_generation(expiry_ledger, identity[0], scope, lease[3], True)
         need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
              'collector heartbeat is in the future')
+        need(lease[2] != 1 or published - lease[1] <= COMMIT_BOUND_SECONDS,
+             'collector publication exceeded bound')
         if dead:
             check_generation(expiry_ledger, identity[0], scope, lease[3], False)
         need(lease[2] == 1 and age < LEASE_SECONDS, 'collector lease closed or expired')
         # Reopen the published pathname: an existing connection stays on its old
         # inode after replacement. Compare raw bytes before any second death claim.
-        before, wall, second_row, second_lease, second_identity = _read_rows(path)
+        before, wall, second_row, second_lease, second_identity, published = _read_rows(path)
         need((second_row, second_lease, second_identity) == (row, lease, identity),
              'watch changed during reader verification')
+        need(published - lease[1] <= COMMIT_BOUND_SECONDS, 'collector publication exceeded bound')
         age = wall - lease[1]
         if before - lease[1] >= cutoff:
             check_generation(expiry_ledger, identity[0], scope, lease[3], False)
