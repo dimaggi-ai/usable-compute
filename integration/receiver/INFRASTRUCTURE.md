@@ -103,3 +103,13 @@ python integration/receiver/tools/verify_interoperability.py \
 ```
 
 The command verifies installed package bytes against this checkout, verifies the source export, compiles the five native boundary tools, runs Go race/vet and all receiver tests, refuses skipped acceptance tests, and records logs, timing and artifact hashes. Go network dependency fetching is disabled during verification. Failures retain their logs and stop the sequence; they do not produce a success claim. The public receiver CI runs the installed package and excludes four private TENWA subprocess suites; this local command supplies all four interfaces.
+
+CPU bindings use `dimaggi-infrastructure-cpu-binding/v2`. Supply `--watch-store`,
+`--tenant` and `--node-uid` to `infrastructure-cpu-binding`. The store must be the
+operator-configured durable Node collector that supplied the placement inventory.
+The command reads it without taking collector ownership. It refuses expired or
+resync-required state and includes the node UID, inventory digest, collector
+session and resource version. Validity ends at the earliest profile, headroom,
+budget, inventory or 300-second deadline. Python callers supply that current
+snapshot as `topology=` and the selected `node_uid=`; a saved export is not a
+current-state check. The deployment owner authenticates the collector and evidence.

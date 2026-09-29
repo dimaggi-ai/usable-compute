@@ -619,7 +619,7 @@ def release_diff(current, candidate, current_digest, candidate_digest):
     )
 
 
-def cpu_binding(registry, request, expected_digest, planned, as_of):
+def cpu_binding(registry, request, expected_digest, planned, as_of, *, topology=None, node_uid=None):
     """Headroom evidence for TENWA's existing signed Deployment configuration.
 
     The deployment owner separately approves evidence trust, image, isolation,
@@ -658,7 +658,30 @@ def cpu_binding(registry, request, expected_digest, planned, as_of):
         raise ValueError("CPU binding exceeds the bounded executor contract")
     from .topology import MaxBindingValidity
 
+    from .topology import current
+    from .observations import _digest
+    import re
+
+    if not isinstance(topology, dict) or topology.get('schema') != 'dimaggi-kubernetes-watch/v1':
+        raise ValueError('current durable Node inventory required')
+    if topology.get('snapshot_id') != _digest({k: v for k, v in topology.items() if k != 'snapshot_id'}):
+        raise ValueError('topology snapshot digest mismatch')
+    if (topology.get('resync_required') is not False or topology.get('issues') != []
+            or not current(topology['observed_at'], topology['expires_at'], as_of)):
+        raise ValueError('current topology requires relist')
+    if topology['scope'][1:] != [p['target_id'], 'nodes', '']:
+        raise ValueError('topology cluster or collection mismatch')
+    identity = r'[A-Za-z0-9][A-Za-z0-9._:/+@=-]{0,255}'
+    if (not isinstance(node_uid, str) or not re.fullmatch(identity, node_uid)
+            or not re.fullmatch(identity, topology['session'])
+            or not re.fullmatch(r'[0-9]{1,32}', topology['resource_version'])):
+        raise ValueError('invalid topology identity')
+    nodes = [n for n in topology['records'].values() if n['metadata']['uid'] == node_uid]
+    if len(nodes) != 1:
+        raise ValueError('selected node UID absent or ambiguous')
     expiry = min(
+        stamp(topology["expires_at"]),
+        stamp(topology["observed_at"]) + timedelta(seconds=MaxBindingValidity),
         stamp(as_of) + timedelta(seconds=MaxBindingValidity),
         stamp(p["observed_at"]) + timedelta(seconds=MaxBindingValidity),
         stamp(profile["valid_until"]),
@@ -669,8 +692,15 @@ def cpu_binding(registry, request, expected_digest, planned, as_of):
             if b["id"] in p["budget_ids"]
         ),
     )
+    if expiry <= stamp(as_of):
+        raise ValueError('CPU binding validity exhausted')
     return dict(
-        schema="dimaggi-infrastructure-cpu-binding/v1",
+        schema="dimaggi-infrastructure-cpu-binding/v2",
+        node_uid=node_uid,
+        topology_snapshot_digest='sha256:' + topology['snapshot_id'],
+        topology_session=topology['session'],
+        topology_resource_version=topology['resource_version'],
+        inventory_expires_at=topology['expires_at'],
         plan_digest=planned["plan_digest"],
         registry_digest=expected_digest,
         input_digest=planned["input_digest"],

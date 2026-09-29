@@ -28,6 +28,10 @@ def add_commands(commands):
             p.add_argument("--evidence-digest", required=True)
         if name in {"infrastructure-reconcile", "infrastructure-cpu-binding"}:
             p.add_argument("--plan", required=True)
+        if name == "infrastructure-cpu-binding":
+            p.add_argument('--watch-store', required=True)
+            p.add_argument('--tenant', required=True)
+            p.add_argument('--node-uid', required=True)
         if name == "infrastructure-reconcile":
             p.add_argument("--observations", required=True)
             p.add_argument("--expected-objects", required=True)
@@ -52,7 +56,13 @@ def run(a):
     if a.command == "infrastructure-plan":
         return infra.plan(r, request, a.registry_digest, a.as_of)
     if a.command == "infrastructure-cpu-binding":
-        return infra.cpu_binding(r, request, a.registry_digest, read(a.plan), a.as_of)
+        from .topology_watch import read_current
+        planned = read(a.plan)
+        pool = next(p for p in request['pools'] if p['id'] == planned['allocations'][0]['pool_id'])
+        topology = read_current(a.watch_store, tenant=a.tenant, cluster=pool['target_id'],
+                                collection='nodes', namespace='', now=a.as_of)
+        return infra.cpu_binding(r, request, a.registry_digest, planned, a.as_of,
+                                 topology=topology, node_uid=a.node_uid)
     return infra.reconcile(
         r,
         request,
