@@ -2,7 +2,7 @@
 
 The caller must supply independently frozen trust bytes; hashes do not authenticate
 that caller. Only the illustrative resource-count profile is implemented. Records
-v1 evidence references remain unverified. No stateful replay ledger is provided.
+v1 consumption requires admission and an owner-provisioned persistent replay store.
 """
 import hashlib
 import json
@@ -206,7 +206,7 @@ def admit_supplied_batch(manifest_bytes, payload_bytes, trusted_profile):
     return result
 
 
-def consume_supplied_batch(manifest_bytes, payload_bytes, trusted_profile, admission_bytes):
+def consume_supplied_batch(manifest_bytes, payload_bytes, trusted_profile, admission_bytes, *, replay_store=None):
     """Return rows only after fresh admission and exact comparison with the receipt.
 
     Receipt flags alone never grant access. This gate authenticates neither the
@@ -215,4 +215,50 @@ def consume_supplied_batch(manifest_bytes, payload_bytes, trusted_profile, admis
     fresh = admit_supplied_batch(manifest_bytes, payload_bytes, trusted_profile)
     check(fresh["admission"] == "accepted_static", "consumer_admission_refused")
     check(type(admission_bytes) is bytes and same(load(admission_bytes), fresh), "consumer_result_mismatch")
+    check(isinstance(replay_store, ReplayStore), 'persistent_replay_store_required')
+    replay_store.claim_many([(manifest_bytes, payload_bytes)])
     return load(payload_bytes)["rows"]
+
+
+class ReplayStore:
+    """Owner-provisioned replay registry; trust authentication remains external."""
+    def __init__(self, path, *, create=False):
+        import os
+        import sqlite3
+        from pathlib import Path
+        from urllib.parse import quote
+        check(str(path) != ':memory:', 'persistent_replay_store_required')
+        if create:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(fd)
+        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=rw'
+        self.db = sqlite3.connect(uri, uri=True, timeout=5)
+        self.db.execute('PRAGMA synchronous=FULL')
+        if create:
+            self.db.execute('CREATE TABLE consumed (identity TEXT PRIMARY KEY)')
+            self.db.commit()
+        check(self.db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'replay_integrity')
+        self.db.execute('SELECT identity FROM consumed LIMIT 1')
+
+    def __enter__(self): return self
+    def __exit__(self, *args): self.db.close()
+
+    def claim_many(self, batches):
+        import sqlite3
+        identities = []
+        for manifest_bytes, payload_bytes in batches:
+            manifest, payload = load(manifest_bytes), load(payload_bytes)
+            scope = manifest['scope']
+            prefix = [scope['repository'], scope['snapshot']]
+            identities.append(sha(encode(['artifact', *prefix, manifest['artifact_id']])))
+            identities.append(sha(encode(['payload', sha(payload_bytes)])))
+            for row in payload['rows']:
+                identities.append(sha(encode(['row', *prefix, row['row_id']])))
+                identities.append(sha(encode(['source', *prefix, row['source_id'], row['group']])))
+        check(len(identities) == len(set(identities)), 'cross_call_replay')
+        try:
+            with self.db:
+                self.db.execute('BEGIN IMMEDIATE')
+                self.db.executemany('INSERT INTO consumed VALUES(?)', [(identity,) for identity in identities])
+        except sqlite3.IntegrityError as exc:
+            raise Refusal('cross_call_replay') from exc

@@ -47,7 +47,7 @@ def fixture():
 
 class RecordTests(unittest.TestCase):
     def test_synthetic_records_never_authorize_continuation(self):
-        result = rsi.assess(fixture(), NOW)
+        result = rsi._assess_records(fixture(), NOW)
         self.assertEqual(result["assessment"], "synthetic_only")
         self.assertEqual(result["recorded_gate"], "recorded_criteria_met")
         self.assertFalse(result["continuation_authorized"])
@@ -57,7 +57,7 @@ class RecordTests(unittest.TestCase):
     def test_observed_label_is_not_authentication(self):
         record = fixture()
         record["evidence_class"] = "observed"  # Deliberate untrusted-label test.
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["assessment"], "recorded_criteria_met")
         self.assertFalse(result["human_reports_verified"])
         self.assertFalse(result["authenticated"])
@@ -66,14 +66,14 @@ class RecordTests(unittest.TestCase):
     def test_empty_record_is_insufficient(self):
         record = fixture()
         record.update(tasks=[], weeks=[], dispositions=[])
-        self.assertEqual(rsi.assess(record, NOW)["recorded_gate"], "insufficient_evidence")
+        self.assertEqual(rsi._assess_records(record, NOW)["recorded_gate"], "insufficient_evidence")
 
     def test_changed_denominator_or_snapshot_is_incomparable(self):
         for field in ("denominator", "snapshot", "objective", "profile", "unit", "workload"):
             with self.subTest(field=field):
                 record = fixture()
                 record["tasks"][0]["assisted_binding"][field] = "changed"
-                result = rsi.assess(record, NOW)
+                result = rsi._assess_records(record, NOW)
                 self.assertEqual(result["recorded_gate"], "not_met")
                 self.assertTrue(any("incomparable" in x for x in result["gate_failures"]))
 
@@ -81,16 +81,16 @@ class RecordTests(unittest.TestCase):
         record = fixture()
         record["dispositions"][1]["finding_id"] = "f0"
         with self.assertRaisesRegex(ValueError, "duplicate"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
         record = fixture()
         record["weeks"][1]["task_ids"] = ["t0"]
         with self.assertRaisesRegex(ValueError, "multiple weeks"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
 
     def test_prior_known_findings_do_not_earn_usefulness_credit(self):
         record = fixture()
         record["dispositions"][0]["prior_known"] = True
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["useful_dispositions"], 1)
         self.assertEqual(result["recorded_gate"], "not_met")
 
@@ -102,7 +102,7 @@ class RecordTests(unittest.TestCase):
                          lambda r: r["dispositions"][0].update(owner=None)):
             record = fixture()
             mutation(record)
-            result = rsi.assess(record, NOW)
+            result = rsi._assess_records(record, NOW)
             self.assertEqual(result["recorded_gate"], "insufficient_evidence")
             self.assertTrue(result["missing"])
             self.assertTrue(all(value is None for value in result["effort_and_cost"].values()))
@@ -110,22 +110,22 @@ class RecordTests(unittest.TestCase):
     def test_failed_check_and_effort_increase_fail_gate(self):
         record = fixture()
         record["tasks"][0]["checks"][0]["outcome"] = "fail"
-        self.assertEqual(rsi.assess(record, NOW)["recorded_gate"], "not_met")
+        self.assertEqual(rsi._assess_records(record, NOW)["recorded_gate"], "not_met")
         record = fixture()
         record["tasks"][0]["assisted"]["active_seconds"] = 1000
-        self.assertEqual(rsi.assess(record, NOW)["recorded_gate"], "not_met")
+        self.assertEqual(rsi._assess_records(record, NOW)["recorded_gate"], "not_met")
 
     def test_nonfinite_boolean_negative_and_huge_numbers_refused(self):
         for value in (True, False, -1, float("nan"), float("inf"), "1", 10 ** 1000):
             record = fixture()
             record["tasks"][0]["manual"]["active_seconds"] = value
             with self.subTest(value=repr(value)), self.assertRaises(ValueError):
-                rsi.assess(record, NOW)
+                rsi._assess_records(record, NOW)
         record = fixture()
         for task in record["tasks"]:
             task["manual"]["active_seconds"] = 1e308
         with self.assertRaisesRegex(ValueError, "aggregate"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
 
     def test_strict_json_duplicates_nonfinite_size_and_unicode(self):
         for raw in (b'{"x":1,"x":2}', b'{"schema":1,"sc\\u0068ema":2}', b'{"x":NaN}',
@@ -137,15 +137,15 @@ class RecordTests(unittest.TestCase):
         record = fixture()
         record["repositories"].append("third-repo")
         with self.assertRaisesRegex(ValueError, "exactly"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
         record = fixture()
         record["candidate_execution_authorized"] = True
         with self.assertRaisesRegex(ValueError, "exact fields"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
         record = fixture()
         record["tasks"][0]["manual"]["currency"] = "EUR"
         with self.assertRaisesRegex(ValueError, "currencies"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
 
     def test_same_day_overlapping_future_and_missing_weeks(self):
         for mutation in (lambda r: r["weeks"][0].update(end=r["weeks"][0]["start"]),
@@ -154,18 +154,18 @@ class RecordTests(unittest.TestCase):
             record = fixture()
             mutation(record)
             with self.assertRaises(ValueError):
-                rsi.assess(record, NOW)
+                rsi._assess_records(record, NOW)
         record = fixture()
         record["weeks"].pop()
-        self.assertEqual(rsi.assess(record, NOW)["recorded_gate"], "insufficient_evidence")
+        self.assertEqual(rsi._assess_records(record, NOW)["recorded_gate"], "insufficient_evidence")
 
     def test_completed_window_may_be_recorded_later_but_not_early(self):
         record = fixture()
         record["weeks"][0]["recorded_at"] = stamp(NOW - timedelta(days=1))
-        self.assertEqual(rsi.assess(record, NOW)["recorded_gate"], "recorded_criteria_met")
+        self.assertEqual(rsi._assess_records(record, NOW)["recorded_gate"], "recorded_criteria_met")
         record["weeks"][0]["recorded_at"] = record["weeks"][0]["start"]
         with self.assertRaisesRegex(ValueError, "incomplete"):
-            rsi.assess(record, NOW)
+            rsi._assess_records(record, NOW)
 
     def test_cli_optimized_refuses_duplicate_json(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -184,14 +184,14 @@ class CreditRegressionTests(unittest.TestCase):
         record = fixture()
         for item in record["dispositions"]:
             item["accepted_at"] = "2020-01-01T00:00:00Z"
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["useful_dispositions"], 0)
         self.assertTrue(any("before task window start" in x for x in result["gate_failures"]))
 
     def test_g1_d2_renamed_decision_refused(self):
         record = fixture()
         record["dispositions"][1] = dict(record["dispositions"][0], id="renamed", finding_id="renamed")
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["useful_dispositions"], 1)
         self.assertTrue(any("duplicate decision content" in x for x in result["gate_failures"]))
 
@@ -209,7 +209,7 @@ class CreditRegressionTests(unittest.TestCase):
                     else:
                         at = rsi.instant(record["weeks"][0]["start"], "test")
                     record["dispositions"][0]["accepted_at"] = stamp(at + timedelta(seconds=delta))
-                    result = rsi.assess(record, NOW)
+                    result = rsi._assess_records(record, NOW)
                     self.assertEqual(result["useful_dispositions"], count)
                     if delta < 0:
                         self.assertTrue(any("before " + reason in x for x in result["gate_failures"]))
@@ -226,7 +226,7 @@ class CreditRegressionTests(unittest.TestCase):
                         target.pop(field)
                     else:
                         target[field] = None
-                    result = rsi.assess(record, NOW)
+                    result = rsi._assess_records(record, NOW)
                     self.assertEqual(result["useful_dispositions"], 0 if field == "baseline_frozen_at" else 1)
                     self.assertEqual(result["recorded_gate"], "insufficient_evidence")
                     self.assertTrue(any("not established" in x for x in result["missing"]))
@@ -237,14 +237,14 @@ class CreditRegressionTests(unittest.TestCase):
                 record = fixture()
                 (record if field == "baseline_frozen_at" else record["tasks"][0])[field] = value
                 with self.subTest(field=field, value=value), self.assertRaises(ValueError):
-                    rsi.assess(record, NOW)
+                    rsi._assess_records(record, NOW)
 
     def test_content_identity_keeps_distinct_tasks_and_decisions(self):
         record = fixture()  # Same snapshot and evidence, distinct task IDs.
-        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+        self.assertEqual(rsi._assess_records(record, NOW)["useful_dispositions"], 2)
         record["dispositions"][1] = dict(record["dispositions"][0], id="other", finding_id="other",
                                          evidence="synthetic://distinct-decision")
-        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+        self.assertEqual(rsi._assess_records(record, NOW)["useful_dispositions"], 2)
 
     def test_noncredit_item_does_not_consume_identity(self):
         for edit in ({"prior_known": True}, {"kind": "rejected"}, {"owner": None},
@@ -253,14 +253,14 @@ class CreditRegressionTests(unittest.TestCase):
             rejected = dict(record["dispositions"][0], id="rejected", finding_id="rejected", **edit)
             record["dispositions"].insert(0, rejected)
             with self.subTest(edit=edit):
-                self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+                self.assertEqual(rsi._assess_records(record, NOW)["useful_dispositions"], 2)
 
     def test_repeated_credit_remains_single_in_either_order(self):
         record = fixture()
         record["dispositions"].append(dict(record["dispositions"][0], id="copy", finding_id="copy"))
         for items in (record["dispositions"], list(reversed(record["dispositions"]))):
             record["dispositions"] = items
-            result = rsi.assess(record, NOW)
+            result = rsi._assess_records(record, NOW)
             self.assertEqual(result["useful_dispositions"], 2)
             self.assertEqual(result["recorded_gate"], "not_met")
             self.assertFalse(result["continuation_authorized"])
@@ -275,7 +275,7 @@ class J19RegressionTests(unittest.TestCase):
         return record
 
     def assert_duplicate(self, record):
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["useful_dispositions"], 1)
         self.assertEqual(result["recorded_gate"], "not_met")
         self.assertEqual(result["gate_failures"].count(
@@ -313,7 +313,7 @@ class J19RegressionTests(unittest.TestCase):
         record = fixture()
         record["dispositions"].append(dict(record["dispositions"][0],
             id="distinct-finding-disposition", finding_id="genuinely-distinct-finding"))
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["useful_dispositions"], 2)
         self.assertEqual(result["recorded_gate"], "not_met")
         self.assertEqual(result["gate_failures"], [
@@ -328,7 +328,7 @@ class J19RegressionTests(unittest.TestCase):
             with self.subTest(first=first, second=second):
                 record = self.duplicate_record(second)
                 record["dispositions"][0]["evidence"] = first
-                self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+                self.assertEqual(rsi._assess_records(record, NOW)["useful_dispositions"], 2)
 
     def test_empty_query_before_nonempty_fragment(self):
         record = self.duplicate_record("synthetic://decision?#part")
@@ -342,7 +342,7 @@ class J19RegressionTests(unittest.TestCase):
         self.assert_duplicate(record)
         record["dispositions"][1]["evidence_sha256"] = "b" * 64
         record["dispositions"][1]["evidence"] = record["dispositions"][0]["evidence"]
-        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+        self.assertEqual(rsi._assess_records(record, NOW)["useful_dispositions"], 2)
 
     def test_digest_validation(self):
         for value in (None, True, 123, "", "a" * 63, "a" * 65, "A" * 64, "g" * 64,
@@ -351,7 +351,7 @@ class J19RegressionTests(unittest.TestCase):
                 record = fixture()
                 record["dispositions"][0]["evidence_sha256"] = value
                 with self.assertRaisesRegex(ValueError, "evidence_sha256"):
-                    rsi.assess(record, NOW)
+                    rsi._assess_records(record, NOW)
 
     def test_digest_does_not_bypass_chronology_or_missing_reference(self):
         for missing in ("evidence", "accepted_at"):
@@ -359,7 +359,7 @@ class J19RegressionTests(unittest.TestCase):
             for item in record["dispositions"]:
                 item["evidence_sha256"] = "a" * 64
                 item[missing] = None
-            result = rsi.assess(record, NOW)
+            result = rsi._assess_records(record, NOW)
             self.assertEqual(result["useful_dispositions"], 0)
             self.assertEqual(result["recorded_gate"], "insufficient_evidence")
 
@@ -368,14 +368,14 @@ class J19RegressionTests(unittest.TestCase):
         record["tasks"][2]["manual_binding"]["snapshot"] = "other-snapshot"
         record["tasks"][2]["assisted_binding"]["snapshot"] = "other-snapshot"
         record["dispositions"][1]["task_id"] = "t2"
-        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+        self.assertEqual(rsi._assess_records(record, NOW)["useful_dispositions"], 2)
 
     def test_legacy_without_chronology_has_no_credit_or_totals(self):
         record = fixture()
         record.pop("baseline_frozen_at")
         for task in record["tasks"]:
             task.pop("snapshot_created_at")
-        result = rsi.assess(record, NOW)
+        result = rsi._assess_records(record, NOW)
         self.assertEqual(result["useful_dispositions"], 0)
         self.assertEqual(result["recorded_gate"], "insufficient_evidence")
         self.assertTrue(all(value is None for value in result["effort_and_cost"].values()))

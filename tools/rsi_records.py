@@ -117,7 +117,7 @@ def evidence_identity(item):
     return hashlib.sha256(reference.encode("utf-8")).hexdigest()
 
 
-def assess(record, now=None):
+def _assess_records(record, now=None):
     """Assess caller-reported records against the inherited gate, not their truth."""
     now = now or datetime.now(timezone.utc)
     require(now.tzinfo is not None and now.utcoffset() == timedelta(0), "evaluation clock must be UTC")
@@ -312,6 +312,39 @@ def assess(record, now=None):
             "human_reports_verified": False, "continuation_authorized": False,
             "candidate_execution_authorized": False,
             "scope": "preliminary caller-record consistency only; no authenticity, real-world truth or expansion approval"}
+
+
+def assess(record, now=None, *, artifacts=None, replay_store=None):
+    """Assess records only after admitting supplied evidence and consuming its identity."""
+    from rsi_admission import admit_supplied_batch, ReplayStore
+    result = _assess_records(record, now)
+    if not artifacts or not isinstance(replay_store, ReplayStore):
+        result['missing'].append('admitted evidence and persistent replay store required')
+        result['recorded_gate'] = 'insufficient_evidence'
+        result['useful_dispositions'] = 0
+        if record['evidence_class'] != 'synthetic': result['assessment'] = 'insufficient_evidence'
+        return result
+    tasks = {task['id']: task for task in record['tasks']}
+    batches = []
+    for item in record['dispositions']:
+        if item['kind'] not in ('useful_change', 'justified_no_change') or item['prior_known']:
+            continue
+        supplied = artifacts.get(item['evidence'])
+        require(isinstance(supplied, dict) and set(supplied) == {'manifest','payload','trust'}, 'admission evidence required')
+        admitted = admit_supplied_batch(supplied['manifest'], supplied['payload'], supplied['trust'])
+        require(admitted['admission'] == 'accepted_static', 'records admission refused')
+        manifest = load(supplied['manifest'])
+        require(record['evidence_class'] == manifest['evidence_class'], 'admission evidence class mismatch')
+        scope = manifest['scope']; binding = tasks[item['task_id']]['assisted_binding']
+        for key, target in [('repo','repository'), ('snapshot','snapshot'), ('profile','profile_id'),
+                            ('objective','objective'), ('denominator','denominator'), ('unit','unit'), ('workload','workload')]:
+            require(binding[key] == scope[target], 'admission scope mismatch: ' + key)
+        if 'evidence_sha256' in item:
+            require(item['evidence_sha256'] == admitted['payload_sha256'], 'admission evidence digest mismatch')
+        batches.append((supplied['manifest'], supplied['payload']))
+    if result['recorded_gate'] == 'recorded_criteria_met':
+        replay_store.claim_many(batches)
+    return result
 
 
 def main():

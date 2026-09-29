@@ -65,7 +65,9 @@ class AdmissionTests(unittest.TestCase):
         r = self.call()
         self.assertEqual({x['id'] for x in r['checks'] if 'row_id' in x},
                          {'nonnegative_integer','unit_consistency','resource_conservation'})
-        self.assertEqual(api.consume_supplied_batch(enc(self.m),enc(self.p),enc(self.t),enc(r)), self.p['rows'])
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory, api.ReplayStore(Path(directory)/'replay.db', create=True) as store:
+            self.assertEqual(api.consume_supplied_batch(enc(self.m),enc(self.p),enc(self.t),enc(r), replay_store=store), self.p['rows'])
     def test_positive_zero_boundary(self):
         for q in self.p['rows'][0]['quantities'].values(): q['value']=0
         bind(self.m,self.p); self.call()
