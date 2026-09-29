@@ -483,17 +483,23 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
         if dead:
             check_generation(expiry_ledger, identity[0], scope, lease[3], False)
         need(lease[2] == 1 and age < LEASE_SECONDS, 'collector lease closed or expired')
-        # Reopen the published pathname: an existing connection stays on its old
-        # inode after replacement. Compare raw bytes before any second death claim.
+        # Accept heartbeat-only progress, then derive every lease/ledger decision
+        # again from that exact newer inode. Projection changes still refuse.
         before, wall, second_row, second_lease, second_identity, published = _read_rows(path)
-        need((second_row, second_lease, second_identity) == (row, lease, identity),
+        need(second_row == row and second_identity == identity
+             and second_lease is not None and second_lease[0] == lease[0]
+             and second_lease[3] == lease[3] and second_lease[1] >= lease[1],
              'watch changed during reader verification')
-        need(published - lease[1] <= COMMIT_BOUND_SECONDS, 'collector publication exceeded bound')
+        lease = second_lease
+        check_generation(expiry_ledger, identity[0], scope, lease[3], True)
+        need(lease[2] != 1 or wall - lease[1] >= -CLOCK_TOLERANCE_SECONDS,
+             'collector heartbeat is in the future')
+        need(lease[2] != 1 or published - lease[1] <= COMMIT_BOUND_SECONDS, 'collector publication exceeded bound')
         age = wall - lease[1]
-        if before - lease[1] >= cutoff:
+        if lease[2] != 1 or before - lease[1] >= cutoff:
             check_generation(expiry_ledger, identity[0], scope, lease[3], False)
         need(age >= -CLOCK_TOLERANCE_SECONDS, 'collector heartbeat is in the future')
-        need(age < LEASE_SECONDS, 'collector lease closed or expired')
+        need(lease[2] == 1 and age < LEASE_SECONDS, 'collector lease closed or expired')
         need(abs(_utc(now).timestamp() - wall) <= CLOCK_TOLERANCE_SECONDS, 'reader clock differs from wall clock')
         result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
         need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
