@@ -180,12 +180,16 @@ def reconcile_allocations(raw_inputs):
     window = (number(first['start_s'], 'start'), number(first['end_s'], 'end'))
     total = Decimal(0)
     seen = set()
+    attempts = set()
     for row in raw_inputs:
         need((number(row['start_s'], 'start'), number(row['end_s'], 'end')) == window,
              'allocation window mismatch')
         need(meter(row) == identity and row['cost'] == first['cost'], 'inconsistent allocation meter or cost')
         key = (row['tenant'], row['window_id'])
         need(key not in seen, 'duplicate allocation claim'); seen.add(key)
+        for attempt in row['attempts']:
+            key = (identity['meter_id'], window, attempt['id'])
+            need(key not in attempts, 'duplicate attempt allocation'); attempts.add(key)
         total += number(row['energy']['allocation_fraction'], 'allocation fraction')
     need(total <= 1, 'meter allocation exceeds one')
     from copy import deepcopy
