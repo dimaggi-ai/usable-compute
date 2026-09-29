@@ -16,3 +16,10 @@ def test_linux_ci_uses_hashed_platform_locks():
         assert 'pytest==8.3.4' in text and '--hash=sha256:' in text
     assert 'qualify_offline.sh' in str(jobs['linux'])
 
+
+def test_macos_ci_has_no_unhashed_network_install():
+    jobs=yaml.safe_load((ROOT/'.github/workflows/receiver.yml').read_text())['jobs']
+    steps=jobs['receiver']['steps']
+    build=next(step['run'] for step in steps if step.get('name') == 'Build and install wheel')
+    assert 'qualify_offline.sh' in build
+    assert 'requirements-darwin-arm64-py312.lock' in build
