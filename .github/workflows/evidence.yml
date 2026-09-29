@@ -15,4 +15,7 @@ jobs:
           python -m pip install --no-index --find-links "$RUNNER_TEMP/wheels" --require-hashes -r integration/receiver/requirements-linux-x86_64-py312.lock
       - run: python tools/validate_evidence.py evidence.json
       - run: python -m unittest discover -s tools -p 'test_*.py'
-      - run: python -m pytest tools -q
+      - name: Gated tools tests
+        run: |
+          python -m pytest tools -q --junitxml "$RUNNER_TEMP/tools-tests.xml"
+          python integration/receiver/tools/check_acceptance.py "$RUNNER_TEMP/tools-tests.xml" integration/receiver/src/dimaggi_receiver/sources.lock.json tools

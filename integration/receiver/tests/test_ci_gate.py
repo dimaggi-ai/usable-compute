@@ -19,15 +19,20 @@ def gate(tmp_path, cases, pin=OLD):
     props = ET.SubElement(suite, 'properties')
     ET.SubElement(props, 'property', name='receiver_xfail_policy', value='strict-v1')
     if pin == OLD or (NAME, 'pass') in cases:
-        critical = json.loads((ROOT/'integration/receiver/tools/critical_tests.json').read_text())
-        for classname, name in critical:
-            if name != NAME: ET.SubElement(suite, 'testcase', classname=classname, name=name)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('ci_manifest', ROOT/'integration/receiver/tools/ci_test_manifest.py')
+        manifest = importlib.util.module_from_spec(spec); spec.loader.exec_module(manifest)
+        for nodeid in json.loads(manifest.manifest_path('receiver').read_text()):
+            classname, name = manifest.junit_identity(nodeid)
+            if (classname, name) != ('tests.test_sim_order', NAME):
+                ET.SubElement(suite, 'testcase', classname=classname, name=name)
     for name, outcome in cases:
         case = ET.SubElement(suite, 'testcase', classname='tests.test_sim_order', name=name)
         if outcome != 'pass':
             ET.SubElement(case, 'failure' if outcome=='failure' else 'skipped',
                           type='pytest.xfail' if outcome=='xfail' else 'pytest.skip',
                           message='METRICS-05: source re-pin is phase 2')
+    suite.set('tests', str(len(suite.findall('testcase'))))
     xml = tmp_path/'receiver-tests.xml'; ET.ElementTree(root).write(xml)
     lock = json.loads(LOCK.read_text()); lock['repositories']['reliability-economics']['commit']=pin
     lock_path=tmp_path/'sources.lock.json'; lock_path.write_text(json.dumps(lock))

@@ -1,4 +1,5 @@
 """Check receiver JUnit results with one source-pin-specific expected failure."""
+from collections import Counter
 import json
 import re
 from pathlib import Path
@@ -10,7 +11,9 @@ KNOWN_CLASS = 'tests.test_sim_order'
 KNOWN_TEST = 'test_direct_sim_normalizes_or_refuses_order_reversal'
 
 
-def check(xml_path, lock_path):
+def check(xml_path, lock_path, suite="receiver"):
+    if suite not in {"receiver", "tools"}:
+        raise ValueError("unknown acceptance selection")
     root = ET.parse(xml_path).getroot()
     cases = list(root.iter('testcase'))
     if not cases or list(root.iter('failure')) or list(root.iter('error')):
@@ -25,21 +28,31 @@ def check(xml_path, lock_path):
     if not suites or any(not any(p.get('name') == 'receiver_xfail_policy' and p.get('value') == 'strict-v1'
                                 for p in suite.findall('./properties/property')) for suite in suites):
         raise ValueError('receiver xfail enforcement evidence required')
-    if any(int(s.get('failures', 0)) or int(s.get('errors', 0)) for s in suites):
-        raise ValueError('failed receiver acceptance suite')
+    for element in root.iter():
+        if element.tag not in ('testsuite', 'testsuites'):
+            continue
+        descendants = list(element.iter('testcase'))
+        actual = {'tests': len(descendants),
+                  **{name: sum(len(case.findall(tag)) for case in descendants)
+                     for name, tag in [('skipped', 'skipped'), ('failures', 'failure'), ('errors', 'error')]}}
+        for name, count in actual.items():
+            raw = element.get(name)
+            if raw is None and element.tag == 'testsuites':
+                continue
+            if raw is None or not raw.isascii() or not raw.isdigit() or int(raw) != count:
+                raise ValueError('JUnit suite counter mismatch: ' + name)
     skips = [(case, skip) for case in cases for skip in case.findall('skipped')]
     pin = json.loads(Path(lock_path).read_text())['repositories']['reliability-economics']['commit']
-    expected = int(pin == OLD_SIMULATOR)
+    expected = int(suite == "receiver" and pin == OLD_SIMULATOR)
     if len(skips) != expected or sum(int(s.get('skipped', 0)) for s in suites) != len(skips):
         raise ValueError('unexpected skipped receiver acceptance test')
     # Critical regressions are required at every pin. At the old simulator pin the
     # simulator regression is instead the single known expected failure checked below.
-    critical = json.loads(Path(__file__).with_name('critical_tests.json').read_text())
+    critical = json.loads(Path(__file__).with_name('critical_tests.json').read_text()) if suite == 'receiver' else []
     for classname, name in critical:
-        if expected and (classname, name) == (KNOWN_CLASS, KNOWN_TEST):
-            continue
         matches = [case for case in cases if (case.get('classname'), case.get('name')) == (classname, name)]
-        if len(matches) != 1 or any(matches[0].find(tag) is not None for tag in ('skipped', 'error', 'failure')):
+        allowed_xfail = expected and (classname, name) == (KNOWN_CLASS, KNOWN_TEST)
+        if len(matches) != 1 or (not allowed_xfail and any(matches[0].find(tag) is not None for tag in ('skipped', 'error', 'failure'))):
             raise ValueError('required receiver regression missing or not passing: ' + classname + '::' + name)
     if expected:
         case, skip = skips[0]
@@ -47,6 +60,17 @@ def check(xml_path, lock_path):
                 or skip.get('type') != 'pytest.xfail'
                 or skip.get('message') != 'METRICS-05: source re-pin is phase 2'):
             raise ValueError('unexpected receiver acceptance exception')
+    # Compare identities, not just a count or a critical subset.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('ci_test_manifest', Path(__file__).with_name('ci_test_manifest.py'))
+    manifest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(manifest)
+    junit_identity, manifest_path = manifest.junit_identity, manifest.manifest_path
+    nodes = json.loads(manifest_path(suite).read_text())
+    required = Counter(junit_identity(node) for node in nodes)
+    actual = Counter((case.get('classname'), case.get('name')) for case in cases)
+    if not required or any(count != 1 for count in required.values()) or actual != required:
+        raise ValueError('JUnit case set differs from CI manifest')
     print(f'Acceptance gate passed: {len(cases)} cases, {expected} known expected failure')
 
 

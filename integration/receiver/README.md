@@ -226,9 +226,20 @@ strict simulator xfail while its old commit remains pinned; every other skip
 refuses. Pytest defaults to strict xfail; the report hook also turns explicitly
 non-strict XPASS into a failing exit. The gate requires the hook's policy marker,
 rejects detectable `wasxfail`/XPASS representations, and requires every test
-declared in `tools/critical_tests.json` to appear once and pass. While the old
-simulator commit is pinned, the simulator regression in that list is instead the
-one allowed xfail.
+declared in `tools/critical_tests.json` to appear exactly once. Each must pass,
+except for the sole simulator case at the old pin, which must have the named
+xfail. A second copy of that identity refuses at every pin.
+
+The gate also requires the complete JUnit case set to equal the committed
+`tools/receiver_tests.json` manifest: every expected identity exactly once, with
+no extras. Suite counters for tests, skips, failures and errors must match the
+actual cases. The evidence workflow gates all root `tools` tests, including RSI,
+against `tools/tools_tests.json` with no allowed exceptions. Both manifests are
+produced by `pytest --collect-only` over the workflow selections. After an intended
+test-selection change, run `python integration/receiver/tools/ci_test_manifest.py`
+from the repository root with the source bundle configured. Use `--check` to
+verify without writing; staleness tests also compare current collection to each
+manifest.
 JUnit alone cannot identify XPASS if an external producer strips its marker and
 reports an ordinary pass; the policy marker is evidence from the configured
 runner, not authentication of arbitrary XML. Four TENWA subprocess suites require separately supplied binaries and
