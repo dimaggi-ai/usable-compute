@@ -32,3 +32,26 @@ def test_fake_transport_collector_keeps_running(tmp_path, monkeypatch, mode):
             assert not w.read_current(tmp_path/'w.db', tenant='t', cluster='c', collection='nodes', now=clock().isoformat().replace('+00:00','Z'))['issues']
         assert sum('watch=true' not in path for path in calls) >= 3
     finally: s.close()
+
+
+def test_fake_transport_refresh_finishes_before_old_projection_expires(tmp_path, monkeypatch):
+    start = datetime.fromisoformat(T.replace('Z', '+00:00')); elapsed = [0]
+    clock = lambda: start + timedelta(seconds=elapsed[0])
+    monkeypatch.setattr(w.time, 'time', lambda: clock().timestamp())
+    path = tmp_path/'w.db'
+    config = dict(endpoint='https://cluster.invalid', ca_pem='test', bearer_token='test', timeout_seconds=30, response_limit=100000)
+    s = w.WatchStore(path, 't', 'c', 'nodes')
+    def fetch(config, url):
+        elapsed[0] += 30
+        if s.session is not None:
+            # A concurrent reader must stay current while the relist is in flight.
+            assert not w.read_current(path, tenant='t', cluster='c', collection='nodes', now=clock().isoformat().replace('+00:00','Z'))['issues']
+        payload = listing(); payload['metadata']['resourceVersion'] = str(elapsed[0])
+        return dict(status=200, body='' if 'watch=true' in url else json.dumps(payload))
+    monkeypatch.setattr(c, 'fetch', fetch)
+    try:
+        for index in range(20):
+            expiry = (clock()+timedelta(seconds=300)).isoformat().replace('+00:00','Z')
+            assert not c.collect(s, config, expires_at=expiry, watch=index>0, clock=clock)['issues']
+            elapsed[0] += 7
+    finally: s.close()

@@ -54,7 +54,7 @@ def collect(store, config, *, expires_at, watch=False, clock=lambda: datetime.no
         if watch:
             prior = store.snapshot(observed_at)
             need(prior['transport_digest']==descriptor, 'TLS source configuration changed; relist required')
-            if prior['issues'] or (_utc(prior['expires_at']) - _utc(observed_at)).total_seconds() <= config['timeout_seconds'] + 1:
+            if prior['issues'] or (_utc(prior['expires_at']) - _utc(observed_at)).total_seconds() <= 2 * (config['timeout_seconds'] + 1):
                 watch = False
         if watch:
             path += '?'+urlencode({'watch':'true','allowWatchBookmarks':'true',

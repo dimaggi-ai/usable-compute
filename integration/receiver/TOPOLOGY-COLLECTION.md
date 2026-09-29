@@ -58,8 +58,9 @@ and a restarted collector always needs a new generation and relist. These checks
 assume the owner protects the database and clock; they do not detect a forged DB.
 
 `collect` renews before each bounded TLS read. Quiet streams trigger a relist when
-the remaining inventory lifetime is at most the configured TLS timeout plus one
-second. HTTP 410 and watch ERROR 410 trigger a relist; a failed relist or other
+the remaining inventory lifetime is at most twice the configured TLS timeout
+plus two seconds, reserving time for both a watch response and its next relist.
+Callers must leave enough scheduling margin to finish that relist before expiry. HTTP 410 and watch ERROR 410 trigger a relist; a failed relist or other
 stream error invalidates the projection and exits. Empty batches renew only the
 lease. Manual loops must run often enough to renew before lease expiry; a
 single gap of 45 seconds between renewals refuses. The maximum 31-second TLS
