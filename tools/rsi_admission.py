@@ -239,6 +239,7 @@ class ReplayStore:
             self.db.execute('CREATE TABLE registry (identity TEXT NOT NULL)')
             self.db.execute('INSERT INTO registry VALUES(?)', (str(uuid.uuid4()),))
             self.db.execute('CREATE TABLE consumed (identity TEXT PRIMARY KEY)')
+            self.db.execute('CREATE TABLE journal (seq INTEGER PRIMARY KEY, kind TEXT NOT NULL, body TEXT NOT NULL, previous TEXT NOT NULL, head TEXT NOT NULL)')
             self.db.commit()
         check(self.db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'replay_integrity')
         self.db.execute('SELECT identity FROM consumed LIMIT 1')
@@ -262,19 +263,56 @@ class ReplayStore:
         try:
             with self.db:
                 self.db.execute('BEGIN IMMEDIATE')
-                self.db.executemany('INSERT INTO consumed VALUES(?)', [(identity,) for identity in identities])
+                for identity in identities:
+                    self.db.execute('INSERT INTO consumed VALUES(?)', (identity,))
+                    _append_entry(self, 'consume', identity)
         except sqlite3.IntegrityError as exc:
             raise Refusal('cross_call_replay') from exc
 
 
-def _store_head(store):
+def _journal(store):
     identity = store.db.execute('SELECT identity FROM registry').fetchall()
     check(len(identity) == 1, 'replay_identity_invalid')
-    rows = store.db.execute('SELECT identity FROM consumed ORDER BY rowid').fetchall()
     head = sha(encode(['replay/v1', identity[0][0]]))
-    for position, row in enumerate(rows, 1):
-        head = sha(encode([head, position, row[0]]))
-    return {'identity': identity[0][0], 'head': head, 'count': len(rows)}
+    genesis = head
+    import sqlite3
+    try:
+        rows = store.db.execute('SELECT seq,kind,body,previous,head FROM journal ORDER BY seq').fetchall()
+    except sqlite3.OperationalError as exc:
+        if store.db.execute("SELECT name FROM sqlite_master WHERE name='journal'").fetchone():
+            raise Refusal('replay_chain_invalid') from exc
+        rows = []
+        previous = genesis
+        for position, (value,) in enumerate(store.db.execute('SELECT identity FROM consumed ORDER BY rowid'), 1):
+            recorded = sha(encode([previous, position, value]))
+            rows.append((position, 'consume', json.dumps(value), previous, recorded))
+            previous = recorded
+    consumed, entries = [], []
+    for position, (seq, kind, body, previous, recorded) in enumerate(rows, 1):
+        check(seq == position and previous == head and kind in ('consume', 'recovery'), 'replay_chain_invalid')
+        value = json.loads(body)
+        head = sha(encode([head, position, value if kind == 'consume' else {'recovery': value}]))
+        check(head == recorded, 'replay_chain_invalid')
+        if kind == 'consume':
+            check(type(value) is str and re.fullmatch('[0-9a-f]{64}', value), 'replay_chain_invalid')
+            consumed.append(value)
+        entries.append(dict(seq=seq, kind=kind, value=value, head=head))
+    actual = [row[0] for row in store.db.execute('SELECT identity FROM consumed ORDER BY rowid')]
+    check(actual == consumed, 'replay_consumptions_mismatch')
+    return dict(identity=identity[0][0], head=head, count=len(rows)), genesis, entries
+
+
+def _store_head(store):
+    return _journal(store)[0]
+
+
+def _append_entry(store, kind, value):
+    identity = store.db.execute('SELECT identity FROM registry').fetchone()[0]
+    row = store.db.execute('SELECT seq,head FROM journal ORDER BY seq DESC LIMIT 1').fetchone()
+    position, previous = (row[0]+1, row[1]) if row else (1, sha(encode(['replay/v1', identity])))
+    head = sha(encode([previous, position, value if kind == 'consume' else {'recovery': value}]))
+    store.db.execute('INSERT INTO journal VALUES(?,?,?,?,?)',
+                     (position, kind, encode(value).decode(), previous, head))
 
 
 def provision_replay_store(path, anchor):
@@ -308,19 +346,86 @@ def claim_designated(batches):
     anchor = Path(configured)
     # A separate lock survives atomic replacement of the anchor.
     with open(str(anchor) + '.lock', 'a+b') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_replay(lock)
         state = load(anchor.read_bytes())
         check(set(state) == {'path', 'identity', 'head', 'count'}, 'replay_anchor_invalid')
         with ReplayStore(state['path']) as store:
             check(_store_head(store) == {k: state[k] for k in ('identity', 'head', 'count')},
                   'replay_anchor_mismatch')
+            check(store.db.execute("SELECT name FROM sqlite_master WHERE name='journal'").fetchone(), 'replay_journal_required')
             ReplayStore.claim_many(store, batches)
             updated = dict(path=state['path'], **_store_head(store))
-        fd, temporary = tempfile.mkstemp(dir=anchor.parent, prefix='.replay-anchor-')
-        try:
-            with os.fdopen(fd, 'wb') as stream:
-                stream.write(encode(updated)); stream.flush(); os.fsync(stream.fileno())
-            os.replace(temporary, anchor)
-            _sync_directory(anchor.parent)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
+        _write_anchor(anchor, updated)
+
+
+def _lock_replay(lock):
+    import fcntl
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        raise Refusal('replay_busy') from exc
+
+
+def _write_anchor(anchor, updated):
+    import os
+    import tempfile
+    from pathlib import Path
+    fd, temporary = tempfile.mkstemp(dir=anchor.parent, prefix='.replay-anchor-')
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(encode(updated)); stream.flush(); os.fsync(stream.fileno())
+        os.replace(temporary, anchor)
+        _sync_directory(anchor.parent)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def recover_replay_store(anchor, *, confirm=False):
+    """Verify an anchored journal prefix; retain all consumption on recovery."""
+    from pathlib import Path
+    anchor = Path(anchor)
+    with open(str(anchor) + '.lock', 'a+b') as lock:
+        _lock_replay(lock)
+        state = load(anchor.read_bytes())
+        check(set(state) == {'path', 'identity', 'head', 'count'}, 'replay_anchor_invalid')
+        with ReplayStore(state['path']) as store:
+            with store.db:
+                store.db.execute('BEGIN IMMEDIATE')
+                current, genesis, entries = _journal(store)
+                count = state['count']
+                check(type(count) is int and 0 <= count <= current['count'], 'replay_anchor_mismatch')
+                prefix = entries[count-1]['head'] if count else genesis
+                check(state['identity'] == current['identity'] and state['head'] == prefix, 'replay_anchor_mismatch')
+                report = dict(anchor=state, database=current, ahead=entries[count:])
+                legacy = not store.db.execute("SELECT name FROM sqlite_master WHERE name='journal'").fetchone()
+                check(bool(report['ahead']) or legacy, 'replay_recovery_not_needed')
+                if confirm is not True:
+                    refusal = Refusal('owner_confirmation_required')
+                    refusal.report = report
+                    raise refusal
+                if not store.db.execute("SELECT name FROM sqlite_master WHERE name='journal'").fetchone():
+                    store.db.execute('CREATE TABLE journal (seq INTEGER PRIMARY KEY, kind TEXT NOT NULL, body TEXT NOT NULL, previous TEXT NOT NULL, head TEXT NOT NULL)')
+                    for entry in entries: _append_entry(store, entry['kind'], entry['value'])
+                    check(_store_head(store) == current, 'replay_chain_invalid')
+                _append_entry(store, 'recovery', report)
+                updated = dict(path=state['path'], **_store_head(store))
+            _write_anchor(anchor, updated)
+            return dict(report, recovered=updated)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Inspect and recover an interrupted replay anchor update.')
+    parser.add_argument('--recover-anchor', required=True)
+    parser.add_argument('--confirm-owner-recovery', action='store_true')
+    args = parser.parse_args()
+    try:
+        print(json.dumps(recover_replay_store(args.recover_anchor, confirm=args.confirm_owner_recovery), sort_keys=True))
+        return 0
+    except Refusal as exc:
+        print(json.dumps(dict(error=exc.code, report=getattr(exc, 'report', None)), sort_keys=True))
+        return 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
