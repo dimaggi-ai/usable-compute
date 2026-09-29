@@ -258,6 +258,7 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
         uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=rw'
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
             db.execute('BEGIN IMMEDIATE')
+            db.execute('UPDATE lease SET live=live WHERE id=1')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
             lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
             wall = time.time()

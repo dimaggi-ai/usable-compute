@@ -90,3 +90,16 @@ def test_heartbeat_refreshes_lease_and_future_clock_refuses(tmp_path, monkeypatc
         monkeypatch.setattr(time, 'time', lambda: initial)
         with pytest.raises(ValueError): read(path)
     finally: store.close()
+
+
+def test_current_reader_refuses_readonly_database(tmp_path):
+    path = tmp_path/'watch.db'
+    store = watch.WatchStore(path, 't', 'c', 'nodes')
+    payload = listing(); payload['metadata']['resourceVersion'] = '12'
+    store.relist(payload, T, E)
+    path.chmod(0o400)
+    try:
+        with pytest.raises(ValueError): read(path)
+    finally:
+        path.chmod(0o600)
+        store.close()
