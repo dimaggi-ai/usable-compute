@@ -32,7 +32,7 @@ target=wheelhouse/wheels[0].name
 shutil.copyfile(wheels[0],target)
 lock=wheelhouse/'receiver-wheel.lock'
 lock.write_text(target.as_uri()+' --hash=sha256:'+pins[0]+'\n')
-subprocess.run([sys.executable, '-m', 'pip', 'install', '--no-index', '--no-deps', '--require-hashes',
+subprocess.run([sys.executable, '-m', 'pip', 'install', '--force-reinstall', '--no-index', '--no-deps', '--require-hashes',
                 '-r', str(lock)], check=True, timeout=60)
 print('receiver wheel sha256:', pins[0])
 PY
