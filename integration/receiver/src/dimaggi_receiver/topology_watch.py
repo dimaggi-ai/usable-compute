@@ -23,6 +23,7 @@ from .expiry_ledger import check_generation, initialize_expiry_ledger
 
 # Forty-five seconds permits the bounded 31-second TLS call plus scheduling slack.
 LEASE_SECONDS = 45
+CLOCK_TOLERANCE_SECONDS = 2
 
 KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'ResourceSlice'),
          'resourceclaims': ('resource.k8s.io/v1', 'ResourceClaim')}
@@ -70,7 +71,7 @@ class WatchStore:
         row = self.db.execute('SELECT owner,generation,live,heartbeat FROM lease WHERE id=1').fetchone()
         need(row is not None and row[:2] == (self.owner_id, self.generation), 'collector lease lost')
         wall, tick = time.time(), time.monotonic()
-        valid = row[2] == 1 and 0 <= wall - row[3] < LEASE_SECONDS
+        valid = row[2] == 1 and -CLOCK_TOLERANCE_SECONDS <= wall - row[3] < LEASE_SECONDS
         valid = valid and 0 <= tick - self.last_tick < LEASE_SECONDS
         if not valid:
             self.db.execute('UPDATE lease SET live=0 WHERE id=1')
@@ -281,9 +282,9 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
             identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
             need(identity is not None and type(identity[0]) is str and identity[0], 'store identity missing')
             wall = time.time()
-            live = lease[2] == 1 and 0 <= wall - lease[1] < LEASE_SECONDS
+            live = lease[2] == 1 and -CLOCK_TOLERANCE_SECONDS <= wall - lease[1] < LEASE_SECONDS
             check_generation(expiry_ledger, identity[0], scope, lease[3], live)
-            need(abs(_utc(now).timestamp() - wall) <= 2, 'reader clock differs from wall clock')
+            need(abs(_utc(now).timestamp() - wall) <= CLOCK_TOLERANCE_SECONDS, 'reader clock differs from wall clock')
             result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))
             need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
             need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')

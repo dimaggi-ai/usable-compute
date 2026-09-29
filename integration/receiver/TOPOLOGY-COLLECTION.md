@@ -54,7 +54,7 @@ generation, even if the clock rolls back or the collector rewrites that lease.
 Reader observations do not close the collector's lease. The collector independently
 refuses expired generations; a new acquisition still requires a new relist.
 
-`close()` closes the collector lease. A reader records a future heartbeat or one
+`close()` closes the collector lease. A reader records a heartbeat more than two seconds in the future or one
 at least 45 seconds old as dead in its ledger; a collector durably closes its own
 lease on either observation. A later wall-clock rollback cannot undo either record. Collectors also refuse renewal after
 45 seconds of monotonic elapsed time since their last checked renewal. Heartbeat
@@ -80,6 +80,15 @@ ledger directory too, retain the ledger over restarts, and never reset it to cle
 refusals. Restoring or deleting its history loses the rollback guarantee. A new
 ledger deployment requires retiring old collector generations and relisting.
 Clock integrity and physical truth remain trusted inputs.
+
+Heartbeat age accepts the interval from -2 seconds through less than 45 seconds.
+The same two-second tolerance applies to caller `now`. A single backward step of
+at most two seconds adds at most two seconds to apparent lease liveness; the
+45-second upper age boundary is unchanged. Larger future skew marks the generation
+dead, and the tolerance never revives a recorded dead generation. Projection
+freshness stays strict: a future observation can temporarily refuse a read without
+killing the lease. Repeated unobserved clock corrections still have no finite
+real-elapsed bound.
 
 `collect` renews before each bounded TLS read. Quiet streams trigger a relist when
 the remaining inventory lifetime is at most twice the configured TLS timeout
