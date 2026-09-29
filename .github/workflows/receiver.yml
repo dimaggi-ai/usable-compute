@@ -67,4 +67,3 @@ jobs:
             --ignore=integration/receiver/tests/test_collection_roundtrip.py \
             --junitxml "$RUNNER_TEMP/receiver-tests.xml"
           python integration/receiver/tools/check_acceptance.py "$RUNNER_TEMP/receiver-tests.xml" integration/receiver/src/dimaggi_receiver/sources.lock.json
-
