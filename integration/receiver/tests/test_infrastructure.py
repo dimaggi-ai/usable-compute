@@ -420,10 +420,26 @@ def test_installed_cli_exact_example_commands(tmp_path):
     store.relist({'apiVersion':'v1', 'kind':'NodeList', 'metadata':{'resourceVersion':'12'},
                   'items':list(t['records'].values())}, t['observed_at'], t['expires_at'])
     # Freeze the subprocess too: these are historical fixture timestamps.
-    runner = ("from unittest.mock import patch; from dimaggi_receiver.observations import _utc; "
-              "from dimaggi_receiver.cli import main; "
-              "clock = patch('time.time', return_value=_utc('2026-09-20T12:00:01Z').timestamp()); "
-              "clock.start(); raise SystemExit(main())")
+    runner = """
+from unittest.mock import patch
+from types import SimpleNamespace
+import os
+from dimaggi_receiver.observations import _utc
+from dimaggi_receiver.cli import main
+stamp = _utc('2026-09-20T12:00:01Z').timestamp()
+patch('time.time', return_value=stamp).start()
+real_fstat = os.fstat
+snapshot = os.stat(SNAPSHOT_PATH)
+def kernel_stat(fd):
+    info = real_fstat(fd)
+    if (info.st_dev, info.st_ino) != (snapshot.st_dev, snapshot.st_ino):
+        return info
+    fields = {k: getattr(info, k) for k in dir(info) if k.startswith('st_')}
+    fields['st_ctime'] = stamp
+    return SimpleNamespace(**fields)
+os.fstat = kernel_stat
+raise SystemExit(main())
+""".replace('SNAPSHOT_PATH', repr(str(tmp_path/'watch.db')))
     for cmd, args, key, expected in commands:
         result = subprocess.run(
             [sys.executable, "-c", runner, cmd, *args],

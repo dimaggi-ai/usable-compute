@@ -131,3 +131,59 @@ def test_projection_write_renews_checked_heartbeat(published):
     store._transaction(lambda value: value)
     assert store.db.execute('SELECT heartbeat FROM lease').fetchone()[0] > old+19
     assert not read(path, ledger)['issues']
+
+
+@pytest.mark.parametrize('delay', [10, 10.0001, 11.9])
+def test_ctime_bound_has_no_cross_host_tolerance(published, monkeypatch, delay):
+    from types import SimpleNamespace
+    store, path, ledger = published
+    heartbeat = store.db.execute('SELECT heartbeat FROM lease').fetchone()[0]
+    inode = path.stat()
+    original = os.fstat
+    def stamp(fd):
+        info = original(fd)
+        if (info.st_dev, info.st_ino) != (inode.st_dev, inode.st_ino): return info
+        fields = {k: getattr(info, k) for k in dir(info) if k.startswith('st_')}
+        fields['st_ctime'] = heartbeat+delay
+        return SimpleNamespace(**fields)
+    monkeypatch.setattr(os, 'fstat', stamp)
+    before = ledger.read_bytes()
+    if delay <= 10: assert not read(path, ledger)['issues']
+    else:
+        with pytest.raises(ValueError, match='publication'): read(path, ledger)
+    assert ledger.read_bytes() == before
+
+
+def test_path_replacement_cannot_substitute_inode_evidence(published, monkeypatch):
+    store, path, ledger = published
+    original = os.open
+    fired = False
+    def swap(p, *args, **kwargs):
+        nonlocal fired
+        fd = original(p, *args, **kwargs)
+        if str(p) == str(path) and not fired:
+            fired = True
+            store.heartbeat()
+        return fd
+    monkeypatch.setattr(os, 'open', swap)
+    before = ledger.read_bytes()
+    with pytest.raises(ValueError): read(path, ledger)
+    assert ledger.read_bytes() == before
+
+
+@pytest.mark.parametrize('migrate', [False, True])
+def test_first_open_publication_has_checked_kernel_stamp(tmp_path, migrate):
+    import shutil
+    path = tmp_path/'db'
+    if migrate:
+        old = w.WatchStore(path, 't', 'c', 'nodes')
+        old.close()
+        shutil.rmtree(path.with_name(path.name+'.collector'))
+    before = time.time()
+    store = w.WatchStore(path, 't', 'c', 'nodes')
+    try:
+        _, _, _, lease, _, stamp = w._read_rows(path)
+        assert before <= lease[1] <= stamp <= time.time()
+        assert stamp-lease[1] <= w.COMMIT_BOUND_SECONDS
+    finally:
+        store.close()

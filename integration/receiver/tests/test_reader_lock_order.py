@@ -67,8 +67,11 @@ def test_changed_database_during_ledger_step_refuses(state, monkeypatch, change)
             store.db.execute(f'UPDATE lease SET {change}=?', (replacement,))
             store._publish()
     monkeypatch.setattr(w, 'check_generation', check)
-    with pytest.raises(ValueError, match='watch changed during reader verification'):
-        read(path, ledger)
+    if change == 'heartbeat':
+        assert not read(path, ledger)['issues']
+    else:
+        reason = 'closed or expired' if change == 'live' else 'watch changed during reader verification'
+        with pytest.raises(ValueError, match=reason): read(path, ledger)
 
 
 @pytest.mark.parametrize('age', [45.1, 47.1])

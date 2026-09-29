@@ -113,7 +113,9 @@ def test_ledger_validation_uses_open_descriptor(state, monkeypatch):
             ledger.rename(ledger.with_suffix('.retained')); ledger.symlink_to(other)
         return fd
     monkeypatch.setattr(os, 'open', swap)
-    assert read(path, ledger)['issues'] == []
+    # First ledger access uses its held descriptor; the mandatory second access
+    # independently refuses the substituted symlink.
+    with pytest.raises(ValueError): read(path, ledger)
     assert other.read_text() == '{}\n'
 
 

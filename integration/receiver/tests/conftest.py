@@ -1,4 +1,6 @@
 import os
+import time
+_REAL_TIME = time.time
 from pathlib import Path
 import pytest
 
@@ -26,6 +28,8 @@ def pytest_runtest_makereport(item, call):
 @pytest.fixture(autouse=True)
 def historical_watch_clock(request, monkeypatch):
     module = request.module.__name__.split('.')[-1]
+    # Isolate real-clock cases from nested historical patch teardown ordering.
+    monkeypatch.setattr(time, 'time', _REAL_TIME)
     if module in {'test_watch_current', 'test_lease_fencing'}:
         stamp = '2026-09-24T00:00:00Z'
     elif module in {'test_binding_v2', 'test_infrastructure', 'test_infrastructure_roundtrip'}:
@@ -52,7 +56,8 @@ def historical_kernel_publication_clock(request, monkeypatch):
                'test_reader_future', 'test_reader_ledger', 'test_reader_renewal',
                'test_reader_lock_order', 'test_reader_tombstone_reason',
                'test_reader_availability', 'test_snapshot_publication',
-               'test_commit_bound', 'test_lease_lock_descriptor'}
+               'test_commit_bound', 'test_lease_lock_descriptor', 'test_collector_clock_lead',
+               'test_collector_recovery', 'test_trust_limits'}
     if module not in modules:
         return
     from dimaggi_receiver import topology_watch as watch
