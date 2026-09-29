@@ -126,6 +126,9 @@ def test_crashed_sqlite_writer_is_not_recovered_by_read_cli(tmp_path, capsys, co
     child = subprocess.run([sys.executable, "-c", """
 import os, sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
+import json
+from dimaggi_receiver.observations import _digest
+db.create_function('decision_hash', 4, lambda table, key, body, previous: _digest([table, key, json.loads(body), previous]))
 db.execute('PRAGMA cache_size=5')
 db.execute('BEGIN IMMEDIATE')
 if sys.argv[2] == 'True':
