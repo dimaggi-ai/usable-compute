@@ -24,13 +24,13 @@ def decimal_contract(function):
     return wrapped
 
 
-def number(value, name, *, positive=False):
+def number(value, name, *, positive=False, signed=False):
     need(type(value) in (int,float,str), name + ': numeric value required')
     try:
         result = Decimal(str(value))
     except Exception as exc:
         raise ObservationError(name + ': invalid decimal') from exc
-    need(result.is_finite() and (result > 0 if positive else result >= 0), name + ': invalid bound')
+    need(result.is_finite() and (result > 0 if positive else signed or result >= 0), name + ': invalid bound')
     need(len(result.as_tuple().digits) <= 64 and abs(result.adjusted()) <= 100, name + ': decimal magnitude or precision exceeded')
     return result
 
@@ -72,7 +72,7 @@ def outcome_metrics(data):
         if qualified:
             accepted+=row['tokens']['output']-row['tokens']['discarded']
             successful_tasks+=int(row['successful_task'])
-    issues=[]; joules=None; peak=None; energy_kind='unknown'; energy_scope=None
+    issues=[]; joules=None; peak=None; peak_resolution_ok=False; energy_kind='unknown'; energy_scope=None
     e=data['energy']
     if e is None:
         issues.append('energy_missing')
@@ -99,7 +99,9 @@ def outcome_metrics(data):
                 if a!=cursor or b-a>max_gap:valid=False
                 energy+=(b-a)*w;values.append(w);cursor=b
             if cursor!=end or not samples:valid=False
-            if valid:peak=max(values);joules=energy*fraction
+            if valid:
+                peak=max(values);joules=energy*fraction
+                peak_resolution_ok = all(number(row['end_s'],'sample end')-number(row['start_s'],'sample start') <= 1 for row in samples)
         else:
             previous=None
             for row in samples:
@@ -141,7 +143,11 @@ def outcome_metrics(data):
     def divide(n,d,scale=1):
         return str(Decimal(n)*scale/Decimal(d)) if n is not None and d is not None and d>0 else None
     # Budget compares total meter peak to the stated budget, not allocated average.
-    budget_state='unknown' if peak is None else ('within' if peak<=budget else 'exceeded')
+    budget_state='unknown'
+    if peak is not None and energy_kind == 'measured':
+        if peak > budget: budget_state='exceeded'
+        elif peak_resolution_ok: budget_state='within'
+    if budget_state == 'unknown': issues.append('power_peak_unqualified')
     result={'schema':'dimaggi-outcome-metrics/v1','input_digest':_digest(data),'window_id':data['window_id'],'tenant':data['tenant'],
             'context_digest':_digest(data['context']),'start_s':str(start),'end_s':str(end),'duration_s':str(duration),'accepted_output_tokens':accepted,
             'token_counts':tokens,'outcome_counts':statuses,'successful_tasks':successful_tasks,
@@ -153,6 +159,7 @@ def outcome_metrics(data):
             'usd_per_million_accepted_tokens':divide(cost,accepted,1000000),
             'joules_per_successful_task':divide(joules,successful_tasks),'usd_per_successful_task':divide(cost,successful_tasks),
             'accepted_tokens_per_second':divide(accepted,duration),'average_attributed_watts':divide(joules,duration),
+            'power_budget_basis':'measured_interval_average_at_most_1s',
             'meter_peak_watts':str(peak) if peak is not None else None,'power_budget_watts':str(budget),
             'power_budget_state':budget_state,'throughput_under_power_budget':divide(accepted,duration) if budget_state=='within' else None,
             'issues':issues,'execution_authorized':False}

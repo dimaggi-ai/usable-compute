@@ -25,7 +25,8 @@ def test_independent_known_answer_includes_failed_cost():
     assert Decimal(r['joules_per_accepted_token'])==10
     assert Decimal(r['usd_per_million_accepted_tokens'])==20000
     assert Decimal(r['joules_per_successful_task'])==1000
-    assert Decimal(r['throughput_under_power_budget'])==10
+    assert r['throughput_under_power_budget'] is None
+    assert r['power_budget_state']=='unknown'
     assert r['outcome_counts']['failed']==1
 
 

@@ -54,3 +54,16 @@ Cost intervals describe the whole meter; cost without an energy allocation stays
 unknown with `cost_allocation_missing`. Numeric inputs are limited to 64 decimal
 digits and adjusted exponents from -100 through 100. Calculations use a private
 512-digit context; ratios may round at that precision.
+
+A power budget verdict of `within` requires measured intervals no longer than one
+second. It describes the declared piecewise-constant interval model, not an
+independent instantaneous-peak measurement. Longer intervals and modelled energy
+leave the verdict unknown; a measured average above the budget still proves an
+exceedance. `power_budget_basis` states this resolution rule. Counter-only energy
+cannot establish peak power. Unknown verdicts retain `power_peak_unqualified`.
+
+Map preempted attempts to `failed`; retries retain distinct attempt IDs and all
+failed and idle energy/cost. Consumers must retain the returned `issues` and exact
+decimal strings. The receiver does not implement the application's ledger review
+or SQLite storage. Training quality targets and observations may be signed finite
+values; resource, time, energy and cost inputs remain nonnegative.
