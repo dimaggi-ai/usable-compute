@@ -224,11 +224,15 @@ class WatchStore:
             # Mark lost before cleanup: even a failed close cannot authorize this
             # object again. Wall elapsed also detects a forward clock step.
             self.lost = True
-            if self.db.in_transaction:
-                self.db.execute('ROLLBACK')
-            self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=? AND generation=?',
-                            (self.owner_id, self.generation))
-            self._publish()
+            try:
+                if self.db.in_transaction:
+                    self.db.execute('ROLLBACK')
+                self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=? AND generation=?',
+                                (self.owner_id, self.generation))
+                self._publish()
+            finally:
+                if self.path is not None:
+                    Path(self.path).unlink(missing_ok=True)
             raise
 
     def _disconnect(self, prior):
@@ -237,8 +241,28 @@ class WatchStore:
             prior['resync_required'] = True
         return prior
 
-    def heartbeat(self):
+    @contextmanager
+    def _write_guard(self):
         with _lease_lock(self.writer_path, writer=True):
+            row = self.db.execute('SELECT owner,generation FROM lease WHERE id=1').fetchone()
+            owns = row == (self.owner_id, self.generation)
+            try:
+                yield
+            except BaseException:
+                try:
+                    if self.db.in_transaction:
+                        self.db.execute('ROLLBACK')
+                finally:
+                    # Ownership was sampled under the same writer flock. No newer
+                    # generation can publish before withdrawal finishes.
+                    if owns:
+                        self.lost = True
+                        if self.path is not None:
+                            Path(self.path).unlink(missing_ok=True)
+                raise
+
+    def heartbeat(self):
+        with self._write_guard():
             self.db.execute('BEGIN IMMEDIATE')
             try:
                 wall, tick = self._check_owner()
@@ -256,22 +280,18 @@ class WatchStore:
 
     def close(self):
         if self.closed: return
-        with _lease_lock(self.writer_path, writer=True):
-            try:
-                changed = self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=?', (self.owner_id,)).rowcount
-                if changed:
-                    self._publish()
-            except BaseException:
-                if self.path is not None and Path(self.path).exists():
-                    raise
-                self.closed = True
-                self.db.close()
-                raise
-            self.closed = True
-            self.db.close()
+        with self._write_guard():
+            self.db.execute('BEGIN IMMEDIATE')
+            changed = self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=? AND generation=?',
+                                      (self.owner_id, self.generation)).rowcount
+            self.db.execute('COMMIT')
+            if changed and (self.path is None or Path(self.path).exists()):
+                self._publish()
+        self.closed = True
+        self.db.close()
 
     def _transaction(self, update):
-        with _lease_lock(self.writer_path, writer=True):
+        with self._write_guard():
             self.db.execute('BEGIN IMMEDIATE')
             try:
                 tick = time.monotonic()

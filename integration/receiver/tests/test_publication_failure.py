@@ -44,3 +44,55 @@ def test_close_retries_when_publication_and_withdrawal_fail(published, monkeypat
     store.close()
     assert store.closed
     with pytest.raises(ValueError): read(path, ledger)
+
+
+@pytest.mark.parametrize('operation', ['heartbeat', 'close', 'fail', 'retire'])
+@pytest.mark.parametrize('failure', ['commit', 'update', 'both'])
+def test_private_write_failure_withdraws_snapshot(published, monkeypatch, operation, failure):
+    import sqlite3
+    store, path, ledger = published
+    real = store.db
+    class Broken:
+        def __getattr__(self, name): return getattr(real, name)
+        def execute(self, sql, *args):
+            if ((failure in ('commit', 'both') and sql == 'COMMIT')
+                    or (failure in ('update', 'both') and sql.startswith('UPDATE lease SET live=0'))):
+                raise sqlite3.OperationalError('injected private write failure')
+            return real.execute(sql, *args)
+    # Force the fallback for an update-only failure after a completed commit.
+    with monkeypatch.context() as patch:
+        patch.setattr(store, 'db', Broken())
+        if failure == 'update' and operation in ('heartbeat', 'fail'):
+            patch.setattr(store, '_publish', lambda: (_ for _ in ()).throw(OSError('injected publication failure')))
+        if operation == 'retire': store.last_tick -= 46
+        with pytest.raises((sqlite3.Error, OSError, ValueError)):
+            getattr(store, 'heartbeat' if operation == 'retire' else operation)()
+        assert not path.exists()
+        before = ledger.read_bytes()
+        with pytest.raises(ValueError): read(path, ledger)
+        assert ledger.read_bytes() == before
+        if operation == 'close':
+            assert not store.closed
+            with pytest.raises(sqlite3.Error): store.close()
+    store.close()
+    assert store.closed
+
+
+def test_failed_old_close_cannot_unlink_new_generation(published, monkeypatch):
+    import sqlite3
+    store, path, ledger = published
+    newer = w.WatchStore(path, 't', 'c', 'nodes')
+    try:
+        original = store.db
+        class Broken:
+            def __getattr__(self, name): return getattr(original, name)
+            def execute(self, sql, *args):
+                if sql.startswith('UPDATE lease'): raise sqlite3.OperationalError('injected failure')
+                return original.execute(sql, *args)
+        with monkeypatch.context() as patch:
+            patch.setattr(store, 'db', Broken())
+            before = path.read_bytes()
+            with pytest.raises(sqlite3.Error): store.close()
+            assert path.read_bytes() == before
+    finally:
+        newer.close()
