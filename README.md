@@ -17,6 +17,16 @@ the planning contract; live TPU/GPU execution remains a separate validation step
 See the [delivery assessment](integration/receiver/DELIVERY-ASSESSMENT.md) for the
 boundary between implemented software, local lab evidence and remaining proof.
 
+The expiry ledger is append-only by cooperation, not tamper-evident. Whole-line
+truncation, valid-file substitution, or re-creation by the reader identity is
+undetectable and can erase recorded expiry. Retain its history; a fresh ledger
+requires retiring old collector generations and relisting.
+
+Manifest completeness is relative to the committed, reviewed manifest.
+Regenerating it after shrinking the test selection blesses that shrink, so
+manifest changes need review alongside source and workflow changes. The gate
+does not authenticate arbitrary JUnit XML or defend against a repository editor.
+
 Turning AI infrastructure investment into usable compute: a portfolio covering
 scheduling, networking, reliability, power, cooling, placement, and governed operations.
 

@@ -121,3 +121,13 @@ tenant and scope and refusing changed state. Serialization loses verification.
 The store path, evaluator process and collector credentials must be owner-controlled;
 this receipt does not authenticate data from a malicious store owner or constrain
 the executor's placement. Drift after the final read remains a consumer boundary.
+
+The expiry ledger is append-only by cooperation, not tamper-evident. Whole-line
+truncation, valid-file substitution, or re-creation by the reader identity is
+undetectable and can erase recorded expiry. Retain its history; a fresh ledger
+requires retiring old collector generations and relisting.
+
+Manifest completeness is relative to the committed, reviewed manifest.
+Regenerating it after shrinking the test selection blesses that shrink, so
+manifest changes need review alongside source and workflow changes. The gate
+does not authenticate arbitrary JUnit XML or defend against a repository editor.

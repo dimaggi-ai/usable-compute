@@ -242,7 +242,21 @@ verify without writing; staleness tests also compare current collection to each
 manifest.
 JUnit alone cannot identify XPASS if an external producer strips its marker and
 reports an ordinary pass; the policy marker is evidence from the configured
-runner, not authentication of arbitrary XML. Four TENWA subprocess suites require separately supplied binaries and
+runner, not authentication of arbitrary XML.
+
+The expiry ledger is append-only by cooperation, not tamper-evident. Whole-line
+truncation, valid-file substitution, or re-creation by the reader identity is
+undetectable and can erase recorded expiry. Retain its history; a fresh ledger
+requires retiring old collector generations and relisting.
+
+Manifest completeness is relative to the committed, reviewed manifest.
+Regenerating it after shrinking the test selection blesses that shrink, so
+manifest changes need review alongside source and workflow changes. The gate
+does not authenticate arbitrary JUnit XML or defend against a repository editor.
+
+See [gate operation and limits](tools/README.md).
+
+Four TENWA subprocess suites require separately supplied binaries and
 are excluded from these public jobs. Local gate checks do not establish a
 successful hosted run or native platform qualification. Run
 those separately with the documented
