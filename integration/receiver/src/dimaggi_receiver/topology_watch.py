@@ -269,14 +269,14 @@ class WatchStore:
             owns = row == (self.owner_id, self.generation)
             try:
                 yield
-            except BaseException:
+            except BaseException as exc:
                 try:
                     if self.db.in_transaction:
                         self.db.execute('ROLLBACK')
                 finally:
                     # Ownership was sampled under the same writer flock. No newer
                     # generation can publish before withdrawal finishes.
-                    if owns:
+                    if owns and (not isinstance(exc, ValueError) or self.lost):
                         self.lost = True
                         if self.path is not None:
                             Path(self.path).unlink(missing_ok=True)
