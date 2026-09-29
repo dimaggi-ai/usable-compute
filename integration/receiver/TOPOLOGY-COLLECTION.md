@@ -4,7 +4,7 @@
 
 `topology_collect.collect` uses an explicitly supplied TLS origin, CA and bearer credential. It issues GET only, follows no redirects and uses no ambient kubeconfig/proxy. The subprocess deadline includes DNS. Responses are capped at 8 MiB; list collections at 10,000 objects; watch batches at 1,024 frames. Paginated lists refuse until a deployment uses a supported bounded collection. A deployment must provision read/list/watch permissions only for its collections and scope. Namespace names alone are not immutable tenant identity; provision the collector and scope under a trusted operator.
 
-A full list establishes an opaque resource version. Ordered watch batches commit atomically. Stream failure, expired resource versions, queue overflow, UID mismatch and competing collectors invalidate the projection. Restart requires relist. Resource versions are never parsed or numerically ordered. Ordering is supplied by the single TLS stream. New collection attempts with changed TLS origin/CA require relist. No health, capacity or execution permission is inferred from a connection.
+A full list establishes an opaque resource version. Ordered watch batches commit atomically. Stream failure, expired resource versions, queue overflow, UID mismatch and competing collectors invalidate the projection. Restart requires relist. Resource versions are never numerically ordered. The execution reader requires a numeric string to match the binding contract; other opaque versions remain inspectable but cannot produce an execution binding. Ordering is supplied by the single TLS stream. New collection attempts with changed TLS origin/CA require relist. No health, capacity or execution permission is inferred from a connection.
 
 SQLite FULL synchronous transactions retain the last committed projection. This is a local persistent cache, not an HA service. Trusted owner-controlled storage is required; an attacker able to replace its database can falsify observations. The in-memory source session prevents a stale collector from advancing a newer session. A conflicting collector can force resynchronization; run one owner per scoped collection.
 
@@ -28,3 +28,24 @@ it can prevent progress and require a shorter collection window. Node heartbeat
 resource-version changes still invalidate dependent snapshots. This conservative
 behavior needs live-cluster liveness qualification before a lab run; synthetic
 TLS tests do not establish production event-rate capacity.
+
+The collector holds a durable owner-ID lease. `close()` marks that lease closed.
+`read_current(path, tenant=..., cluster=..., collection=..., namespace=..., now=...)`
+refuses closed leases, future heartbeats and heartbeats at least 45 seconds old.
+The lease uses the evaluator's wall clock, separately from the observation-time
+argument. Forty-five seconds permits the bounded 31-second TLS operation plus
+scheduling slack while staying below the 300-second observation cap. A crash can
+remain undetected for up to 45 seconds; this is bounded loss detection, not
+instantaneous failure detection.
+
+`collect` renews before TLS reads and accepted relist/watch batches renew on commit.
+Manual collector loops must call `heartbeat()` at least every 30 seconds and call
+`fail()` on stream loss. An empty batch renews only the lease, not inventory age.
+A stopped one-shot collector cannot supply a current binding after it closes.
+
+The reader returns a dict-compatible, process-local verified receipt. Binding
+production accepts only an unmodified receipt and re-reads its store, checking
+tenant and scope and refusing changed state. Serialization loses verification.
+The store path, evaluator process and collector credentials must be owner-controlled;
+this receipt does not authenticate data from a malicious store owner or constrain
+the executor's placement. Drift after the final read remains a consumer boundary.

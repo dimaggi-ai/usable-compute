@@ -202,7 +202,8 @@ Build `batch-journal-demo` from the same TENWA checkout. The journal round-trip
 tests require `DIMAGGI_BATCH_JOURNAL`; skips do not establish journal integration.
 Install pytest separately (the recorded environment lock includes it); it is not
 a runtime dependency. Tests requiring the bundle explicitly skip without
-`DIMAGGI_TEST_SOURCES`; those skips do not establish model acceptance. Tests cover
+`DIMAGGI_TEST_SOURCES`; those skips do not establish model acceptance. CI sets
+`DIMAGGI_EXPECT_SOURCES=1`, which makes a missing bundle or an ordinary skip fail. Tests cover
 all seven real model cases, owner fixture round trips, exact numeric decisions,
 byte preservation, forged/rehashed report variants, source tampering/import
 shadowing and strict CLI boundaries. The separate operator-discovery, CPU lab
@@ -218,10 +219,13 @@ before domain evaluation. The byte limit does not bound total Python process
 memory or domain evaluation cost. Large journal exports still require a separate
 bounded transport design; this change does not add pagination or truncate them.
 
-The installed-receiver GitHub workflow builds a wheel on macOS, fetches the
-exact eight public source commits, verifies their locked file hashes and runs
-the receiver/domain tests with no unexpected skips. It explicitly excludes the
-two TENWA subprocess suites, which require separately supplied binaries. Run
+The installed-receiver GitHub workflow is configured to build on macOS and both
+Linux architectures, export the same eight pinned source commits, verify their
+file hashes and run source-bound tests. The JUnit gate allows exactly the named
+strict simulator xfail while its old commit remains pinned; every other skip
+refuses. Four TENWA subprocess suites require separately supplied binaries and
+are excluded from these public jobs. Local gate checks do not establish a
+successful hosted run or native platform qualification. Run
 those separately with the documented
 TENWA binaries for cross-language acceptance. CI success does not establish
 another engineer's independent acceptance or real scheduler execution.

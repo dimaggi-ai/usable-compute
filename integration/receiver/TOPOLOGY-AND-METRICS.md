@@ -34,9 +34,8 @@ uncertainty remains explicit; it is not a statistical confidence interval.
 
 Journal files use descriptor-owned byte-range locks on Darwin and qualified LP64
 Linux ABIs. Tests check competing processes, hard-link aliases, unrelated descriptor
-closure, writer death and committed-state recovery. Actual Linux arm64 container
-checks are distinct from native Darwin arm64 checks. Linux x86_64 uses the documented
-ABI but has not been exercised by this candidate. No power-cut/filesystem or live
+closure, writer death and committed-state recovery. The managed Linux x86_64 interpreter exercises the fallback ABI. Native Linux
+arm64 and Darwin qualification remain separate, unverified platform obligations. No power-cut/filesystem or live
 cluster acceptance follows from process-kill tests.
 
 Engineering checks do not replace independent acceptance or authorize deployment.
@@ -44,7 +43,10 @@ Engineering checks do not replace independent acceptance or authorize deployment
 `reconcile_allocations(raw_inputs)` checks one meter and exact `[start_s,end_s)`
 window, including every tenant and retry. The caller must serialize persistent
 inserts and submit the complete group. Window labels do not separate claims on the
-same physical interval. Meter samples, scope and whole-meter cost intervals must
+same physical interval. Repeated attempt IDs are refused for that meter and exact
+interval regardless of tenant or window labels. Non-exact intervals, including
+overlapping aliases, refuse. Distinct retry attempt IDs remain subject to the same
+fraction total. Meter samples, scope and whole-meter cost intervals must
 agree. Fractions use exact Decimal addition with zero tolerance: a sum above one
 is refused. Each allocation receives the same fraction of energy and cost.
 The result contains `allocations`, `allocated_fraction`, `unattributed_fraction`,
