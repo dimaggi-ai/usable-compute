@@ -46,6 +46,7 @@ class WatchStore:
         if 'generation' not in {row[1] for row in self.db.execute('PRAGMA table_info(lease)')}:
             self.db.execute('ALTER TABLE lease ADD COLUMN generation TEXT')
         self.generation = str(uuid.uuid4())
+        self.last_tick = time.monotonic()
         self.session = None
         self.transport_digest = None
         try:
@@ -62,8 +63,14 @@ class WatchStore:
         return prior
 
     def _check_owner(self):
-        row = self.db.execute('SELECT owner,generation,live FROM lease WHERE id=1').fetchone()
-        need(row == (self.owner_id, self.generation, 1), 'collector lease lost')
+        row = self.db.execute('SELECT owner,generation,live,heartbeat FROM lease WHERE id=1').fetchone()
+        need(row is not None and row[:2] == (self.owner_id, self.generation), 'collector lease lost')
+        valid = row[2] == 1 and 0 <= time.time() - row[3] < LEASE_SECONDS
+        valid = valid and 0 <= time.monotonic() - self.last_tick < LEASE_SECONDS
+        if not valid:
+            self.db.execute('UPDATE lease SET live=0 WHERE id=1')
+            self.db.execute('COMMIT')
+            need(False, 'collector lease closed or expired')
 
     def _disconnect(self, prior):
         if prior:
@@ -72,9 +79,15 @@ class WatchStore:
         return prior
 
     def heartbeat(self):
-        row = self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1 AND owner=? AND live=1',
-                              (time.time(), self.owner_id))
-        need(row.rowcount == 1, 'collector lease lost')
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            self._check_owner()
+            self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1', (time.time(),))
+            self.db.execute('COMMIT')
+            self.last_tick = time.monotonic()
+        except BaseException:
+            if self.db.in_transaction: self.db.execute('ROLLBACK')
+            raise
 
     def close(self):
         if not self.closed:
@@ -101,7 +114,7 @@ class WatchStore:
             self.db.execute('COMMIT')
             return value
         except BaseException:
-            self.db.execute('ROLLBACK')
+            if self.db.in_transaction: self.db.execute('ROLLBACK')
             raise
 
     def fail(self):
@@ -241,13 +254,16 @@ def verified_snapshot(value, *, tenant, cluster, now):
 def read_current(path, *, tenant, cluster, collection, namespace='', now):
     """Read a current collector projection without taking ownership or creating it."""
     try:
-        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=ro'
+        uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=rw'
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:
-            db.execute('BEGIN')
+            db.execute('BEGIN IMMEDIATE')
             need(db.execute('PRAGMA quick_check').fetchone()[0] == 'ok', 'watch integrity check failed')
             lease = db.execute('SELECT owner,heartbeat,live,generation FROM lease WHERE id=1').fetchone()
-            need(lease is not None and lease[0] and lease[2] == 1
-                 and 0 <= time.time() - lease[1] < LEASE_SECONDS, 'collector lease closed or expired')
+            live = lease is not None and lease[0] and lease[2] == 1 and 0 <= time.time() - lease[1] < LEASE_SECONDS
+            if not live:
+                db.execute('UPDATE lease SET live=0 WHERE id=1')
+                db.commit()
+            need(live, 'collector lease closed or expired')
             row = db.execute('SELECT body,digest FROM projection WHERE id=1').fetchone()
             need(row is not None, 'no topology collection')
             value = json.loads(row[0])
