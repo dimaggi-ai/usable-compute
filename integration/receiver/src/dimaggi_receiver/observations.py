@@ -243,7 +243,54 @@ class ObservationStore:
                 self.db.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_no_{operation.lower()}
                     BEFORE {operation} ON {table}
                     BEGIN SELECT RAISE(ABORT, 'append-only journal'); END""")
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS event_integrity (
+                position INTEGER PRIMARY KEY, body_sha256 TEXT, previous_sha256 TEXT,
+                row_sha256 TEXT, status TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS chain_state (
+                id INTEGER PRIMARY KEY CHECK(id=1), count INTEGER NOT NULL, head TEXT NOT NULL);
+        """)
+        if not self.db.execute('SELECT 1 FROM chain_state').fetchone():
+            rows = self.db.execute('SELECT position FROM events ORDER BY position').fetchall()
+            self.db.executemany("INSERT INTO event_integrity VALUES (?,NULL,NULL,NULL,'unverified-legacy')",
+                                [(row[0],) for row in rows])
+            self.db.execute('INSERT INTO chain_state VALUES(1,?,?)', (len(rows), '0'*64))
         self.db.commit()
+
+    def _verify_chain(self, *, allow_legacy=False):
+        try:
+            if self.db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
+                raise ObservationError('journal integrity check failed')
+            rows = self.db.execute('SELECT * FROM events ORDER BY position').fetchall()
+            links = self.db.execute('SELECT * FROM event_integrity ORDER BY position').fetchall()
+            state = self.db.execute('SELECT count,head FROM chain_state WHERE id=1').fetchone()
+            if state is None or len(rows) != state['count'] or len(links) != len(rows):
+                raise ObservationError('journal integrity count mismatch')
+            previous = '0'*64
+            legacy = False
+            for row, link in zip(rows, links):
+                if row['position'] != link['position']:
+                    raise ObservationError('journal integrity order mismatch')
+                if link['status'] == 'unverified-legacy':
+                    legacy = True
+                    continue
+                body_hash = hashlib.sha256(row['body'].encode()).hexdigest()
+                expected = _digest({'row': dict(row), 'previous_sha256': previous})
+                if (link['status'] != 'verified' or link['body_sha256'] != body_hash
+                        or link['previous_sha256'] != previous or link['row_sha256'] != expected):
+                    raise ObservationError('journal integrity digest mismatch')
+                previous = expected
+            if legacy:
+                if not allow_legacy:
+                    raise ObservationError('journal integrity unverified-legacy: rebaseline required')
+            elif state['head'] != previous:
+                raise ObservationError('journal integrity head mismatch')
+            return {'count': len(rows), 'sha256': previous, 'integrity': 'unverified-legacy' if legacy else 'verified'}
+        except sqlite3.Error as exc:
+            raise ObservationError('journal integrity unavailable') from exc
+
+    def chain_head(self):
+        return self._verify_chain()
 
     def close(self) -> None:
         try:
@@ -325,6 +372,7 @@ class ObservationStore:
         """
         if type(event) is not dict or set(event) != EVENT_KEYS:
             raise ObservationError("event fields must match the declared contract")
+        head = self._verify_chain()
         body = _json(event)
         for field in (*IDENTITIES, "event_id", "source_id", "source_epoch", "source_record_id", "source_version"):
             _identifier(event[field], field)
@@ -390,11 +438,17 @@ class ObservationStore:
                 VALUES (?,?,?,?,?,?,?,?,?)""", (
                 event["event_id"], event["request_id"], event["source_id"], event["source_epoch"],
                 event["source_record_id"], event["source_version"], event["source_sequence"], recorded_at_utc, body))
+            row = self.db.execute('SELECT * FROM events WHERE event_id=?', (event['event_id'],)).fetchone()
+            row_hash = _digest({'row': dict(row), 'previous_sha256': head['sha256']})
+            self.db.execute("INSERT INTO event_integrity VALUES(?,?,?,?,'verified')",
+                            (row['position'], hashlib.sha256(body.encode()).hexdigest(), head['sha256'], row_hash))
+            self.db.execute('UPDATE chain_state SET count=?,head=? WHERE id=1', (head['count']+1, row_hash))
         return True
 
     def history(self, request_id: str) -> list[dict[str, Any]]:
         self.intent(request_id)
-        return [{"event": json.loads(row["body"]), "recorded_at_utc": row["recorded_at"]}
+        integrity = self._verify_chain(allow_legacy=True)
+        return [{**({"integrity": "unverified-legacy"} if integrity["integrity"] == "unverified-legacy" else {}), "event": json.loads(row["body"]), "recorded_at_utc": row["recorded_at"]}
                 for row in self.db.execute("SELECT * FROM events WHERE request_id=? ORDER BY position", (request_id,))]
 
     def project(self, request_id: str, *, as_of_utc: str,
@@ -405,6 +459,7 @@ class ObservationStore:
         ingestion and source observation times, so a historical view cannot use
         evidence learned later. Case IDs are stable for the same reason/events.
         """
+        self._verify_chain()
         intent = self.intent(request_id)
         as_of = _utc(as_of_utc)
         if type(freshness_seconds) is not dict or set(freshness_seconds) != KINDS:
@@ -521,11 +576,15 @@ class ObservationStore:
         return {"reconciliation_id": identity, **result}
 
     def reconciliation(self, reconciliation_id: str) -> dict[str, Any]:
+        self._verify_chain()
         _identifier(reconciliation_id, "reconciliation_id")
         row = self.db.execute("SELECT body FROM reconciliations WHERE reconciliation_id=?", (reconciliation_id,)).fetchone()
         if not row:
             raise ObservationError("unknown reconciliation identity")
-        return {"reconciliation_id": reconciliation_id, **json.loads(row["body"])}
+        value = json.loads(row['body'])
+        if _digest(value) != reconciliation_id:
+            raise ObservationError('journal integrity reconciliation mismatch')
+        return {"reconciliation_id": reconciliation_id, **value}
 
     def record_triage(self, *, triage_id: str, reconciliation_id: str, case_id: str,
                       actor_id: str, disposition: str, reason: str,

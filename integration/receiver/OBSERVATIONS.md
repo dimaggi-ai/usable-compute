@@ -201,3 +201,18 @@ PYTHONPATH=integration/receiver/src python -m pytest -q integration/receiver/tes
 
 These product observations/cases are not RSI work. No candidate execution or
 read-only digest improvement claim is produced here.
+
+New journal events carry a SHA-256 body digest and a chained row digest covering
+all stored event columns and the previous row digest. Every history, projection,
+reconciliation and append verifies the complete event chain and its stored head.
+`ObservationStore.chain_head()` returns the count and SHA-256 head for an owner
+to anchor outside the journal. Reconciliation bodies are checked against their IDs.
+
+Opening an older journal with migration enabled labels its events
+`unverified-legacy`. History exposes that label; projections and new appends refuse
+until the owner rebaselines into a new journal from independently retained evidence.
+Migration cannot authenticate old rows. An unanchored chain detects accidental
+and partial tampering, including deleted or reordered rows, but cannot detect a
+full rewrite of the events, digests and head. Store an external checkpoint under
+independent control when that threat matters. The chain does not authenticate
+collectors or prove the truth of observations.
