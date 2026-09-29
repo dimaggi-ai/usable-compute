@@ -393,7 +393,7 @@ def test_installed_cli_exact_example_commands(tmp_path):
         ),
         (
             "infrastructure-cpu-binding",
-            common + ["--plan", str(tmp_path / "plan.json"), "--watch-store", str(tmp_path / "watch.db"), "--tenant", "synthetic-tenant", "--node-uid", "host-uid"],
+            common + ["--plan", str(tmp_path / "plan.json"), "--watch-store", str(tmp_path / "watch.db"), "--expiry-ledger", str(tmp_path / "reader.ledger"), "--tenant", "synthetic-tenant", "--node-uid", "host-uid"],
             "permission",
             "not_granted",
         ),
@@ -413,7 +413,8 @@ def test_installed_cli_exact_example_commands(tmp_path):
             [],
         ),
     ]
-    from dimaggi_receiver.topology_watch import WatchStore
+    from dimaggi_receiver.topology_watch import WatchStore, initialize_expiry_ledger
+    initialize_expiry_ledger(tmp_path / "reader.ledger")
     store = WatchStore(tmp_path / 'watch.db', 'synthetic-tenant', 'synthetic-cluster', 'nodes')
     t = fixture.topology_fixture()
     store.relist({'apiVersion':'v1', 'kind':'NodeList', 'metadata':{'resourceVersion':'12'},
