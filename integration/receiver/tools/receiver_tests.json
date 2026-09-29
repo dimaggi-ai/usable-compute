@@ -535,6 +535,8 @@
   "tests/test_lease_fencing.py::test_failed_acquisition_does_not_publish_lease[crash]",
   "tests/test_lease_fencing.py::test_failed_acquisition_does_not_publish_lease[scope]",
   "tests/test_lease_fencing.py::test_generation_requires_its_own_relist",
+  "tests/test_lease_lock_descriptor.py::test_missing_sidecar_refuses_without_recording_expiry",
+  "tests/test_lease_lock_descriptor.py::test_reader_preserves_other_connection_sqlite_reservation",
   "tests/test_ledger_provision_mode.py::test_provision_enforces_usable_private_mode[191]",
   "tests/test_ledger_provision_mode.py::test_provision_enforces_usable_private_mode[511]",
   "tests/test_ledger_provision_mode.py::test_provision_enforces_usable_private_mode[63]",

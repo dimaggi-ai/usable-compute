@@ -10,6 +10,7 @@ from contextlib import closing, contextmanager
 import json
 import fcntl
 import os
+import stat
 import sqlite3
 import re
 import sys
@@ -33,13 +34,18 @@ KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'Reso
 
 @contextmanager
 def _lease_lock(path, *, writer=False):
-    # Cooperative lock on the trusted database inode, separate from SQLite locks.
+    # A separate trusted inode is essential: closing ANY descriptor for the
+    # database can drop SQLite's process-wide POSIX locks on that database.
     # In rollback mode a SHARED SQL lock blocks commits, but not a writer that
     # already checked its renewal and is waiting to commit. WAL readers can also
     # see an older snapshot. Hold this lock before BEGIN through COMMIT on both
     # sides, excluding pending renewals and starting even WAL snapshots fresh.
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    if path is None:  # Private :memory: stores cannot be read by read_current.
+        yield
+        return
+    fd = os.open(str(path) + '.lease-lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
+        need(stat.S_ISREG(os.fstat(fd).st_mode), 'regular collector lease lock required')
         deadline = time.perf_counter() + 5
         while True:
             try:
@@ -59,7 +65,19 @@ class WatchStore:
         self.scope = [ _identifier(tenant, 'tenant'), _identifier(cluster, 'cluster'), collection, namespace ]
         need((collection == 'resourceclaims') == bool(namespace), 'claims require explicit namespace')
         if namespace: _identifier(namespace, 'namespace')
-        self.path = str(Path(path).resolve())
+        self.path = None if str(path) == ':memory:' else str(Path(path).resolve())
+        if self.path is not None:
+            # Collector provisions an empty, reader-accessible coordination file.
+            # Keep it with the trusted database; never replace it while in use.
+            try:
+                fd = os.open(self.path + '.lease-lock', os.O_RDONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+            except FileExistsError:
+                pass
+            else:
+                try:
+                    os.fchmod(fd, 0o644)
+                finally:
+                    os.close(fd)
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.execute('PRAGMA synchronous=FULL')
         if sys.platform == 'darwin':
@@ -321,8 +339,8 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
             check_generation(expiry_ledger, identity[0], scope, lease[3], True)
             need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
                  'collector heartbeat is in the future')
-            # A correct collector's own wall age is now >=45 (reader skew <=2),
-            # and no checked renewal is pending. It cannot renew this generation.
+            # For age-based death the collector's own age is >=45 (skew <=2),
+            # with no checked renewal pending. Closed leases cannot renew either.
             # That decision survives releasing both locks before ledger wait/fsync.
             if dead:
                 check_generation(expiry_ledger, identity[0], scope, lease[3], False)

@@ -13,7 +13,7 @@ def test_expiry_is_durable_across_rollback(tmp_path, observer):
     with patch.object(w.time, 'time', return_value=start):
         s, payload = live(path)
     try:
-        with patch.object(w.time, 'time', return_value=start+46):
+        with patch.object(w.time, 'time', return_value=start+(47 if observer == 'reader' else 46)):
             with pytest.raises(ValueError):
                 if observer == 'reader': read(path)
                 elif observer == 'heartbeat': s.heartbeat()

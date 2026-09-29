@@ -139,7 +139,9 @@ def test_busy_sampling_lock_refuses_without_ledger_write(state, monkeypatch):
     before = ledger.read_bytes()
     ticks = iter([0, 6])
     monkeypatch.setattr(w.time, 'perf_counter', lambda: next(ticks))
-    with path.open('rb') as holder:
+    sidecar = path.with_name(path.name+'.lease-lock')
+    sidecar.touch(exist_ok=True)
+    with sidecar.open('rb') as holder:
         fcntl.flock(holder, fcntl.LOCK_EX)
         with pytest.raises(ValueError, match='collector lease sampling busy'):
             read(path, ledger)
