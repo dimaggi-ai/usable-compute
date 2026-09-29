@@ -253,7 +253,7 @@ def verified_snapshot(value, *, tenant, cluster, now):
 
 
 def read_current(path, *, tenant, cluster, collection, namespace='', now):
-    """Read a current collector projection without taking ownership or creating it."""
+    """Read without acquiring ownership; durably close observed expired leases."""
     try:
         uri = 'file:' + quote(str(Path(path).resolve()), safe='/') + '?mode=rw'
         with closing(sqlite3.connect(uri, uri=True, timeout=5)) as db:

@@ -29,19 +29,45 @@ resource-version changes still invalidate dependent snapshots. This conservative
 behavior needs live-cluster liveness qualification before a lab run; synthetic
 TLS tests do not establish production event-rate capacity.
 
-The collector holds a durable owner-ID lease. `close()` marks that lease closed.
-`read_current(path, tenant=..., cluster=..., collection=..., namespace=..., now=...)`
-refuses closed leases, future heartbeats and heartbeats at least 45 seconds old.
-The lease uses the evaluator's wall clock, separately from the observation-time
-argument. Forty-five seconds permits the bounded 31-second TLS operation plus
-scheduling slack while staying below the 300-second observation cap. A crash can
-remain undetected for up to 45 seconds; this is bounded loss detection, not
-instantaneous failure detection.
+Lease acquisition, scope validation and invalidation of the old projection commit
+in one transaction. Every acquisition assigns a new generation. Only a successful
+relist for that generation can make its projection current. Every projection
+write checks the lease owner and generation inside its transaction, so a displaced
+collector cannot overwrite or invalidate its successor's projection.
 
-`collect` renews before TLS reads and accepted relist/watch batches renew on commit.
-Manual collector loops must call `heartbeat()` at least every 30 seconds and call
-`fail()` on stream loss. An empty batch renews only the lease, not inventory age.
-A stopped one-shot collector cannot supply a current binding after it closes.
+`read_current(path, tenant=..., cluster=..., collection=..., namespace=..., now=...)`
+uses one wall-clock sample for lease liveness and projection freshness. Caller
+`now` must be within two seconds of that sample; it does not control freshness.
+The reader requires write access to the existing database to record lease expiry.
+It never creates a missing store. Read-only storage fails closed.
+
+`close()` closes the lease. A reader or collector that observes a future heartbeat
+or a heartbeat at least 45 seconds old durably closes that generation. A later
+wall-clock rollback cannot reopen it. Collectors also refuse renewal after
+45 seconds of monotonic elapsed time since their last renewal. Recovery requires
+a new WatchStore acquisition and a new relist, not a heartbeat of the old lease.
+
+With an advancing wall clock, a crash is detected on the first read at least
+45 seconds after the last heartbeat. That is a lease-age bound, not a guarantee
+that a reader runs within 45 seconds. An unobserved forward clock jump followed
+by rollback cannot be remembered. A rollback before any expiry observation can
+extend a dead lease's apparent wall-clock lifetime if it lands after the last
+heartbeat; repeated corrections have no finite real-time detection bound for
+readers. A surviving collector's monotonic check prevents renewal after suspension,
+and a restarted collector always needs a new generation and relist. These checks
+assume the owner protects the database and clock; they do not detect a forged DB.
+
+`collect` renews before each bounded TLS read. Quiet streams trigger a relist when
+the remaining inventory lifetime is at most the configured TLS timeout plus one
+second. HTTP 410 and watch ERROR 410 trigger a relist; a failed relist or other
+stream error invalidates the projection and exits. Empty batches renew only the
+lease. Manual loops must run often enough to renew before lease expiry; a
+single gap of 45 seconds between renewals refuses. The maximum 31-second TLS
+operation leaves less than 14 seconds for processing and scheduling before
+renewal. Callers must schedule renewals before the lease expires.
+Fake-transport tests cover quiet streams and 410 recovery, not live-cluster
+liveness or scheduler capacity. A one-shot collector cannot supply a current
+binding after it closes.
 
 The reader returns a dict-compatible, process-local verified receipt. Binding
 production accepts only an unmodified receipt and re-reads its store, checking
