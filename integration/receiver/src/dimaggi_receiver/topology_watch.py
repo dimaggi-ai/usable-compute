@@ -81,6 +81,8 @@ class WatchStore:
             os.fchmod(fd, 0o600)
             os.close(fd)
         with _lease_lock(self.writer_path, writer=True):
+            if self.path is not None:
+                self._check_rename_ctime()
             migrate = self.writer_path is not None and not Path(self.writer_path).exists() and Path(self.path).exists()
             self.db = sqlite3.connect(self.writer_path or ':memory:', timeout=5, isolation_level=None)
             if self.writer_path is not None:
@@ -143,6 +145,25 @@ class WatchStore:
             self._publish()
             need(False, 'collector lease closed or expired')
         return wall, tick
+
+    def _check_rename_ctime(self):
+        fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
+        target = source + '-probe'
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            initial = os.stat(source).st_ctime_ns
+            deadline = time.perf_counter() + CLOCK_TOLERANCE_SECONDS
+            while True:
+                os.replace(source, target)
+                if os.stat(target).st_ctime_ns > initial:
+                    return
+                need(time.perf_counter() < deadline, 'rename must advance publication ctime')
+                source, target = target, source
+                time.sleep(0.01)
+        finally:
+            os.close(fd)
+            Path(source).unlink(missing_ok=True)
+            Path(target).unlink(missing_ok=True)
 
     def _remove_public_journals(self):
         for suffix in ('-wal', '-shm', '-journal'):
@@ -475,7 +496,7 @@ def _read_rows(path, *, integrity=False):
         current_inode = os.stat(path, follow_symlinks=False)
         need((info.st_dev, info.st_ino) == (current_inode.st_dev, current_inode.st_ino),
              'watch changed during reader verification')
-        published = os.fstat(fd).st_ctime
+        published = info.st_ctime
     finally:
         os.close(fd)
     return before, wall, row, lease, identity, published
@@ -499,7 +520,7 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
         check_generation(expiry_ledger, identity[0], scope, lease[3], True)
         need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
              'collector heartbeat is in the future')
-        need(lease[2] != 1 or published - lease[1] <= COMMIT_BOUND_SECONDS,
+        need(lease[2] != 1 or -CLOCK_TOLERANCE_SECONDS <= published - lease[1] <= COMMIT_BOUND_SECONDS,
              'collector publication exceeded bound')
         if dead:
             check_generation(expiry_ledger, identity[0], scope, lease[3], False)
@@ -516,7 +537,7 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
         wall = time.time()
         need(lease[2] != 1 or wall - lease[1] >= -CLOCK_TOLERANCE_SECONDS,
              'collector heartbeat is in the future')
-        need(lease[2] != 1 or published - lease[1] <= COMMIT_BOUND_SECONDS, 'collector publication exceeded bound')
+        need(lease[2] != 1 or -CLOCK_TOLERANCE_SECONDS <= published - lease[1] <= COMMIT_BOUND_SECONDS, 'collector publication exceeded bound')
         age = wall - lease[1]
         if lease[2] != 1 or before - lease[1] >= cutoff:
             check_generation(expiry_ledger, identity[0], scope, lease[3], False)
