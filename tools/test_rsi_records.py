@@ -29,12 +29,14 @@ def fixture():
                       "assisted_binding": dict(binding), "manual": dict(effort),
                       "assisted": dict(effort, active_seconds=45),
                       "checks": [{"id": "mandatory", "outcome": "pass", "evidence": "synthetic://check"}],
-                      "exposure": "synthetic exposed fixture; no independence claim", "evidence": "synthetic://task"})
+                      "exposure": "synthetic exposed fixture; no independence claim", "evidence": "synthetic://task",
+                      "snapshot_created_at": stamp(NOW - timedelta(days=40))})
         start = NOW - timedelta(days=35 - 7 * i)
         end = start + timedelta(days=7)
         weeks.append({"id": "w" + str(i), "start": stamp(start), "end": stamp(end),
                       "recorded_at": stamp(end), "task_ids": ["t" + str(i)], "evidence": "synthetic://week"})
     return {"schema": "dimaggi-rsi-records/v1", "evidence_class": "synthetic",
+            "baseline_frozen_at": stamp(NOW - timedelta(days=40)),
             "repositories": sorted(rsi.REPOSITORIES), "required_checks": ["mandatory"],
             "tasks": tasks, "weeks": weeks, "setup": dict(effort, active_seconds=120),
             "dispositions": [{"id": "d" + str(i), "finding_id": "f" + str(i), "task_id": "t" + str(i),
@@ -175,6 +177,208 @@ class RecordTests(unittest.TestCase):
             self.assertEqual(result.stdout, "")
             self.assertIn("duplicate", result.stderr)
 
+
+
+class CreditRegressionTests(unittest.TestCase):
+    def test_g1_d1_backdated_dispositions_refused(self):
+        record = fixture()
+        for item in record["dispositions"]:
+            item["accepted_at"] = "2020-01-01T00:00:00Z"
+        result = rsi.assess(record, NOW)
+        self.assertEqual(result["useful_dispositions"], 0)
+        self.assertTrue(any("before task window start" in x for x in result["gate_failures"]))
+
+    def test_g1_d2_renamed_decision_refused(self):
+        record = fixture()
+        record["dispositions"][1] = dict(record["dispositions"][0], id="renamed", finding_id="renamed")
+        result = rsi.assess(record, NOW)
+        self.assertEqual(result["useful_dispositions"], 1)
+        self.assertTrue(any("duplicate decision content" in x for x in result["gate_failures"]))
+
+    def test_each_temporal_lower_bound_and_equality(self):
+        for boundary, reason in (("baseline", "baseline freeze"), ("window", "task window start"),
+                                 ("snapshot", "snapshot creation")):
+            for delta, count in ((-1, 1), (0, 2), (1, 2)):
+                with self.subTest(boundary=boundary, delta=delta):
+                    record = fixture()
+                    at = NOW - timedelta(days=2)
+                    if boundary == "baseline":
+                        record["baseline_frozen_at"] = stamp(at)
+                    elif boundary == "snapshot":
+                        record["tasks"][0]["snapshot_created_at"] = stamp(at)
+                    else:
+                        at = rsi.instant(record["weeks"][0]["start"], "test")
+                    record["dispositions"][0]["accepted_at"] = stamp(at + timedelta(seconds=delta))
+                    result = rsi.assess(record, NOW)
+                    self.assertEqual(result["useful_dispositions"], count)
+                    if delta < 0:
+                        self.assertTrue(any("before " + reason in x for x in result["gate_failures"]))
+
+    def test_unknown_times_refuse_credit(self):
+        for field in ("baseline_frozen_at", "snapshot_created_at", "window"):
+            for absent in (True, False):
+                with self.subTest(field=field, absent=absent):
+                    record = fixture()
+                    target = record if field == "baseline_frozen_at" else record["tasks"][0]
+                    if field == "window":
+                        record["weeks"][0]["task_ids"] = []
+                    elif absent:
+                        target.pop(field)
+                    else:
+                        target[field] = None
+                    result = rsi.assess(record, NOW)
+                    self.assertEqual(result["useful_dispositions"], 0 if field == "baseline_frozen_at" else 1)
+                    self.assertEqual(result["recorded_gate"], "insufficient_evidence")
+                    self.assertTrue(any("not established" in x for x in result["missing"]))
+
+    def test_temporal_fields_validate_utc(self):
+        for field in ("baseline_frozen_at", "snapshot_created_at"):
+            for value in (False, "bad", "2026-01-01T00:00:00+00:00"):
+                record = fixture()
+                (record if field == "baseline_frozen_at" else record["tasks"][0])[field] = value
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    rsi.assess(record, NOW)
+
+    def test_content_identity_keeps_distinct_tasks_and_decisions(self):
+        record = fixture()  # Same snapshot and evidence, distinct task IDs.
+        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+        record["dispositions"][1] = dict(record["dispositions"][0], id="other", finding_id="other",
+                                         evidence="synthetic://distinct-decision")
+        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+
+    def test_noncredit_item_does_not_consume_identity(self):
+        for edit in ({"prior_known": True}, {"kind": "rejected"}, {"owner": None},
+                     {"accepted_at": "2020-01-01T00:00:00Z"}):
+            record = fixture()
+            rejected = dict(record["dispositions"][0], id="rejected", finding_id="rejected", **edit)
+            record["dispositions"].insert(0, rejected)
+            with self.subTest(edit=edit):
+                self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+
+    def test_repeated_credit_remains_single_in_either_order(self):
+        record = fixture()
+        record["dispositions"].append(dict(record["dispositions"][0], id="copy", finding_id="copy"))
+        for items in (record["dispositions"], list(reversed(record["dispositions"]))):
+            record["dispositions"] = items
+            result = rsi.assess(record, NOW)
+            self.assertEqual(result["useful_dispositions"], 2)
+            self.assertEqual(result["recorded_gate"], "not_met")
+            self.assertFalse(result["continuation_authorized"])
+
+
+
+class J19RegressionTests(unittest.TestCase):
+    def duplicate_record(self, evidence="synthetic://decision"):
+        record = fixture()
+        record["dispositions"][1] = dict(record["dispositions"][0], id="distinct-finding-disposition",
+                                         finding_id="genuinely-distinct-finding", evidence=evidence)
+        return record
+
+    def assert_duplicate(self, record):
+        result = rsi.assess(record, NOW)
+        self.assertEqual(result["useful_dispositions"], 1)
+        self.assertEqual(result["recorded_gate"], "not_met")
+        self.assertEqual(result["gate_failures"].count(
+            "distinct-finding-disposition: duplicate decision content; no useful credit"), 1)
+
+    def test_leading_space(self):
+        self.assert_duplicate(self.duplicate_record(" synthetic://decision"))
+
+    def test_trailing_space(self):
+        self.assert_duplicate(self.duplicate_record("synthetic://decision "))
+
+    def test_scheme_case(self):
+        self.assert_duplicate(self.duplicate_record("SyNtHeTiC://decision"))
+
+    def test_empty_fragment(self):
+        self.assert_duplicate(self.duplicate_record("synthetic://decision#"))
+
+    def test_empty_query(self):
+        self.assert_duplicate(self.duplicate_record("synthetic://decision?"))
+
+    def test_combined_normalization(self):
+        self.assert_duplicate(self.duplicate_record("  SYNTHETIC://decision?# "))
+
+    def test_cloned_task(self):
+        import copy
+        record = self.duplicate_record()
+        cloned = copy.deepcopy(record["tasks"][0])
+        cloned["id"] = "cloned-task"
+        record["tasks"].append(cloned)
+        record["weeks"][0]["task_ids"].append(cloned["id"])
+        record["dispositions"][1]["task_id"] = cloned["id"]
+        self.assert_duplicate(record)
+
+    def test_shared_evidence_marks_gate_even_with_two_credits(self):
+        record = fixture()
+        record["dispositions"].append(dict(record["dispositions"][0],
+            id="distinct-finding-disposition", finding_id="genuinely-distinct-finding"))
+        result = rsi.assess(record, NOW)
+        self.assertEqual(result["useful_dispositions"], 2)
+        self.assertEqual(result["recorded_gate"], "not_met")
+        self.assertEqual(result["gate_failures"], [
+            "distinct-finding-disposition: duplicate decision content; no useful credit"])
+
+    def test_path_case_and_nonempty_components_preserved(self):
+        for first, second in (("synthetic://host/Path", "synthetic://host/path"),
+                              ("synthetic://host/Path", "synthetic://HOST/Path"),
+                              ("synthetic://decision", "synthetic://decision#part"),
+                              ("synthetic://decision", "synthetic://decision?q=1"),
+                              ("relative/Path", "relative/path")):
+            with self.subTest(first=first, second=second):
+                record = self.duplicate_record(second)
+                record["dispositions"][0]["evidence"] = first
+                self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+
+    def test_empty_query_before_nonempty_fragment(self):
+        record = self.duplicate_record("synthetic://decision?#part")
+        record["dispositions"][0]["evidence"] = "synthetic://decision#part"
+        self.assert_duplicate(record)
+
+    def test_digest_overrides_reference(self):
+        record = self.duplicate_record("synthetic://different-location")
+        for item in record["dispositions"]:
+            item["evidence_sha256"] = "a" * 64
+        self.assert_duplicate(record)
+        record["dispositions"][1]["evidence_sha256"] = "b" * 64
+        record["dispositions"][1]["evidence"] = record["dispositions"][0]["evidence"]
+        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+
+    def test_digest_validation(self):
+        for value in (None, True, 123, "", "a" * 63, "a" * 65, "A" * 64, "g" * 64,
+                      " " + "a" * 64, "a" * 64 + "\n"):
+            with self.subTest(value=value):
+                record = fixture()
+                record["dispositions"][0]["evidence_sha256"] = value
+                with self.assertRaisesRegex(ValueError, "evidence_sha256"):
+                    rsi.assess(record, NOW)
+
+    def test_digest_does_not_bypass_chronology_or_missing_reference(self):
+        for missing in ("evidence", "accepted_at"):
+            record = fixture()
+            for item in record["dispositions"]:
+                item["evidence_sha256"] = "a" * 64
+                item[missing] = None
+            result = rsi.assess(record, NOW)
+            self.assertEqual(result["useful_dispositions"], 0)
+            self.assertEqual(result["recorded_gate"], "insufficient_evidence")
+
+    def test_distinct_snapshot_keeps_credit(self):
+        record = self.duplicate_record()
+        record["tasks"][2]["manual_binding"]["snapshot"] = "other-snapshot"
+        record["tasks"][2]["assisted_binding"]["snapshot"] = "other-snapshot"
+        record["dispositions"][1]["task_id"] = "t2"
+        self.assertEqual(rsi.assess(record, NOW)["useful_dispositions"], 2)
+
+    def test_legacy_without_chronology_has_no_credit_or_totals(self):
+        record = fixture()
+        record.pop("baseline_frozen_at")
+        for task in record["tasks"]:
+            task.pop("snapshot_created_at")
+        result = rsi.assess(record, NOW)
+        self.assertEqual(result["useful_dispositions"], 0)
+        self.assertEqual(result["recorded_gate"], "insufficient_evidence")
+        self.assertTrue(all(value is None for value in result["effort_and_cost"].values()))
 
 if __name__ == "__main__":
     unittest.main()

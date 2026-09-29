@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
-"""Check bounded read-only RSI records; never authenticate reports or authorize expansion."""
+"""Check bounded read-only RSI records; never authenticate reports or authorize expansion.
+
+Useful credit is unique per repository, snapshot and evidence identity, regardless
+of task/finding/disposition labels. Shared evidence counts once and marks the gate
+with "duplicate decision content; no useful credit", even for distinct findings.
+Without evidence_sha256, identity hashes the normalized reference, not an
+authenticated content digest. Normalization strips surrounding whitespace, drops
+empty query/fragment markers and lowercases only the URI scheme, never the path.
+An optional disposition evidence_sha256 must be 64 lowercase hex characters and
+replaces the reference identity; it is caller-supplied and remains unauthenticated.
+Different references or dishonest digests can still evade content deduplication.
+Legacy records without chronology earn zero useful credit; every effort_and_cost
+value is null because chronology is missing (the summary object is retained).
+"""
 import argparse
+import hashlib
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import json
 import math
+import re
 from pathlib import Path
 import sys
 
@@ -53,8 +68,9 @@ def load(raw):
     return value
 
 
-def fields(value, keys, label):
-    require(isinstance(value, dict) and set(value) == set(keys), label + ": exact fields required")
+def fields(value, keys, label, optional=()):
+    require(isinstance(value, dict) and set(keys) <= set(value) <= set(keys) | set(optional),
+            label + ": exact fields required")
 
 
 def text(value, label):
@@ -88,12 +104,27 @@ def amount(value, label, missing):
     return Decimal(str(value))
 
 
+def evidence_identity(item):
+    if "evidence_sha256" in item:
+        return item["evidence_sha256"]
+    reference = item["evidence"].strip()
+    base, fragment_marker, fragment = reference.partition("#")
+    path, query_marker, query = base.partition("?")
+    reference = path + (query_marker + query if query else "")
+    reference += fragment_marker + fragment if fragment else ""
+    reference = re.sub(r"^([A-Za-z][A-Za-z0-9+.-]*):",
+                       lambda match: match.group(1).lower() + ":", reference)
+    return hashlib.sha256(reference.encode("utf-8")).hexdigest()
+
+
 def assess(record, now=None):
     """Assess caller-reported records against the inherited gate, not their truth."""
     now = now or datetime.now(timezone.utc)
     require(now.tzinfo is not None and now.utcoffset() == timedelta(0), "evaluation clock must be UTC")
     fields(record, {"schema", "evidence_class", "repositories", "required_checks", "tasks",
-                    "weeks", "dispositions", "setup"}, "record")
+                    "weeks", "dispositions", "setup"}, "record", optional={"baseline_frozen_at"})
+    baseline = record.get("baseline_frozen_at")
+    baseline = instant(baseline, "baseline_frozen_at") if baseline is not None else None
     require(record["schema"] == "dimaggi-rsi-records/v1", "unsupported schema")
     require(record["evidence_class"] in ("observed", "synthetic"), "explicit evidence class required")
     repos = record["repositories"]
@@ -132,14 +163,17 @@ def assess(record, now=None):
     totals["setup_seconds"], totals["setup_cost"] = effort(record["setup"], "setup")
     array(record["tasks"], "tasks")
     tasks = {}
+    snapshot_times = {}
     seen_checks = set()
     for task in record["tasks"]:
         fields(task, {"id", "manual_binding", "assisted_binding", "manual", "assisted",
-                      "checks", "exposure", "evidence"}, "task")
+                      "checks", "exposure", "evidence"}, "task", optional={"snapshot_created_at"})
         identifier = task["id"]
         text(identifier, "task ID")
         require(identifier not in tasks, "duplicate task ID")
         tasks[identifier] = task
+        created = task.get("snapshot_created_at")
+        snapshot_times[identifier] = instant(created, "snapshot_created_at") if created is not None else None
         for key in ("manual_binding", "assisted_binding"):
             fields(task[key], BINDING, key)
             for name, value in task[key].items():
@@ -181,6 +215,7 @@ def assess(record, now=None):
     require(len(currencies) <= 1, "cost currencies differ; conversion is outside this contract")
     array(record["weeks"], "weeks")
     require(len(record["weeks"]) <= 4, "this contract accepts at most four weekly windows")
+    task_starts = {}
     weekly_ids, used_tasks, previous_end = set(), set(), None
     for week in record["weeks"]:
         fields(week, {"id", "start", "end", "recorded_at", "task_ids", "evidence"}, "week")
@@ -196,6 +231,7 @@ def assess(record, now=None):
         require(len(week["task_ids"]) == len(set(week["task_ids"])) and all(x in tasks for x in week["task_ids"]), "unknown or duplicate weekly task")
         require(not used_tasks.intersection(week["task_ids"]), "one task cannot be counted in multiple weeks")
         used_tasks.update(week["task_ids"])
+        task_starts.update((identifier, start) for identifier in week["task_ids"])
         if not week["task_ids"]:
             missing.append(week["id"] + ": no actual tasks")
         if week["evidence"] is None:
@@ -208,8 +244,13 @@ def assess(record, now=None):
         missing.append("tasks not bound to an observed weekly window")
     array(record["dispositions"], "dispositions")
     disposition_ids, findings, useful = set(), set(), 0
+    credited_content = set()
     for item in record["dispositions"]:
-        fields(item, {"id", "finding_id", "task_id", "kind", "prior_known", "owner", "accepted_at", "evidence"}, "disposition")
+        fields(item, {"id", "finding_id", "task_id", "kind", "prior_known", "owner", "accepted_at", "evidence"}, "disposition", optional={"evidence_sha256"})
+        if "evidence_sha256" in item:
+            digest = item["evidence_sha256"]
+            require(isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) is not None,
+                    "disposition.evidence_sha256: 64 lowercase hex characters required")
         for key in ("id", "finding_id", "task_id"):
             text(item[key], "disposition." + key)
         require(item["id"] not in disposition_ids and item["finding_id"] not in findings, "duplicate disposition or finding credit")
@@ -228,7 +269,27 @@ def assess(record, now=None):
         if item["accepted_at"] is not None:
             require(instant(item["accepted_at"], "accepted_at") <= now, "future disposition")
         if item["kind"] in ("useful_change", "justified_no_change") and not item["prior_known"] and complete:
-            useful += 1
+            accepted = instant(item["accepted_at"], "accepted_at")
+            eligible = True
+            for label, boundary in (("baseline freeze", baseline),
+                                    ("task window start", task_starts.get(item["task_id"])),
+                                    ("snapshot creation", snapshot_times[item["task_id"]])):
+                if boundary is None:
+                    missing.append(item["id"] + ": " + label + " not established; no useful credit")
+                    eligible = False
+                elif accepted < boundary:
+                    failures.append(item["id"] + ": accepted before " + label + "; no useful credit")
+                    eligible = False
+            # Caller-supplied identity only; no evidence is fetched or authenticated.
+            # Task/finding/disposition labels cannot mint another useful credit.
+            binding = tasks[item["task_id"]]["assisted_binding"]
+            identity = (binding["repo"], binding["snapshot"], evidence_identity(item))
+            if identity in credited_content:
+                failures.append(item["id"] + ": duplicate decision content; no useful credit")
+                eligible = False
+            if eligible:
+                credited_content.add(identity)
+                useful += 1
     if useful < 2:
         failures.append("fewer than two unique evidence-linked useful dispositions")
     if totals["assisted_seconds"] > totals["manual_seconds"]:
