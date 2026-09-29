@@ -758,6 +758,8 @@
   "tests/test_reader_renewal.py::test_renewal_after_snapshot_never_records_death[ledger-wal]",
   "tests/test_reader_renewal.py::test_renewal_before_first_wall_sample[delete]",
   "tests/test_reader_renewal.py::test_renewal_before_first_wall_sample[wal]",
+  "tests/test_reader_tombstone_reason.py::test_recorded_expiry_precedes_future_diagnostic[heartbeat_rewrite]",
+  "tests/test_reader_tombstone_reason.py::test_recorded_expiry_precedes_future_diagnostic[reader_step]",
   "tests/test_receiver.py::test_64_chip_memory_negative_is_incomparable",
   "tests/test_receiver.py::test_actual_fragmentation_and_bandwidth_no_benefit",
   "tests/test_receiver.py::test_exact_resource_result_survives_rounding_and_bytes",

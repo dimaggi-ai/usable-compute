@@ -317,12 +317,15 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
                 age = wall - lease[1]
                 dead = lease[2] != 1 or age >= LEASE_SECONDS + CLOCK_TOLERANCE_SECONDS
                 db.execute('COMMIT')
+            # Recorded death takes diagnostic priority, even after clock rollback.
+            check_generation(expiry_ledger, identity[0], scope, lease[3], True)
             need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
                  'collector heartbeat is in the future')
             # A correct collector's own wall age is now >=45 (reader skew <=2),
             # and no checked renewal is pending. It cannot renew this generation.
             # That decision survives releasing both locks before ledger wait/fsync.
-            check_generation(expiry_ledger, identity[0], scope, lease[3], not dead)
+            if dead:
+                check_generation(expiry_ledger, identity[0], scope, lease[3], False)
             need(age < LEASE_SECONDS, 'collector lease closed or expired')
             with _lease_lock(Path(path).resolve()):
                 db.execute('BEGIN')
