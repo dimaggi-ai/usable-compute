@@ -223,7 +223,13 @@ The installed-receiver GitHub workflow is configured to build on macOS and both
 Linux architectures, export the same eight pinned source commits, verify their
 file hashes and run source-bound tests. The JUnit gate allows exactly the named
 strict simulator xfail while its old commit remains pinned; every other skip
-refuses. Four TENWA subprocess suites require separately supplied binaries and
+refuses. Pytest defaults to strict xfail; the report hook also turns explicitly
+non-strict XPASS into a failing exit. The gate requires the hook's policy marker,
+rejects detectable `wasxfail`/XPASS representations, and after re-pin requires
+every test declared in `tools/critical_tests.json` to appear once and pass.
+JUnit alone cannot identify XPASS if an external producer strips its marker and
+reports an ordinary pass; the policy marker is evidence from the configured
+runner, not authentication of arbitrary XML. Four TENWA subprocess suites require separately supplied binaries and
 are excluded from these public jobs. Local gate checks do not establish a
 successful hosted run or native platform qualification. Run
 those separately with the documented
