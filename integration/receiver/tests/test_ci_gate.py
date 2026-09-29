@@ -16,6 +16,12 @@ NAME = 'test_direct_sim_normalizes_or_refuses_order_reversal'
 def gate(tmp_path, cases, pin=OLD):
     root = ET.Element('testsuites')
     suite = ET.SubElement(root, 'testsuite', tests=str(len(cases)), skipped=str(sum(c[1] in ('skip','xfail') for c in cases)), failures=str(sum(c[1]=='failure' for c in cases)), errors='0')
+    props = ET.SubElement(suite, 'properties')
+    ET.SubElement(props, 'property', name='receiver_xfail_policy', value='strict-v1')
+    if pin != OLD and (NAME, 'pass') in cases:
+        critical = json.loads((ROOT/'integration/receiver/tools/critical_tests.json').read_text())
+        for classname, name in critical:
+            if name != NAME: ET.SubElement(suite, 'testcase', classname=classname, name=name)
     for name, outcome in cases:
         case = ET.SubElement(suite, 'testcase', classname='tests.test_sim_order', name=name)
         if outcome != 'pass':

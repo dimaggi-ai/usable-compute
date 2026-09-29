@@ -14,6 +14,10 @@ def pytest_sessionstart(session):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
+    if report.passed and hasattr(report, 'wasxfail'):
+        report.outcome = 'failed'
+        report.longrepr = 'Unexpected XPASS: ' + str(report.wasxfail)
+        del report.wasxfail
     if os.environ.get('DIMAGGI_EXPECT_SOURCES') == '1' and report.skipped and not hasattr(report, 'wasxfail'):
         report.outcome = 'failed'
         report.longrepr = 'Unexpected skip with required CI sources: ' + str(report.longrepr)
@@ -30,3 +34,8 @@ def historical_watch_clock(request, monkeypatch):
         return
     from dimaggi_receiver import topology_watch as watch
     monkeypatch.setattr(watch.time, 'time', lambda: watch._utc(stamp).timestamp())
+
+
+@pytest.fixture(scope='session', autouse=True)
+def xfail_policy_evidence(record_testsuite_property):
+    record_testsuite_property('receiver_xfail_policy', 'strict-v1')

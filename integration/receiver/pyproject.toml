@@ -20,3 +20,4 @@ dimaggi_receiver = ["sources.lock.json", "profile.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+xfail_strict = true
