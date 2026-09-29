@@ -40,3 +40,17 @@ ABI but has not been exercised by this candidate. No power-cut/filesystem or liv
 cluster acceptance follows from process-kill tests.
 
 Engineering checks do not replace independent acceptance or authorize deployment.
+
+`reconcile_allocations(raw_inputs)` checks one meter and exact `[start_s,end_s)`
+window, including every tenant and retry. The caller must serialize persistent
+inserts and submit the complete group. Window labels do not separate claims on the
+same physical interval. Meter samples, scope and whole-meter cost intervals must
+agree. Fractions use exact Decimal addition with zero tolerance: a sum above one
+is refused. Each allocation receives the same fraction of energy and cost.
+The result contains `allocations`, `allocated_fraction`, `unattributed_fraction`,
+`unattributed_energy_j` and `unattributed_cost_usd`. Missing measurements remain
+null. A single `outcome_metrics` call cannot establish complete group coverage.
+Cost intervals describe the whole meter; cost without an energy allocation stays
+unknown with `cost_allocation_missing`. Numeric inputs are limited to 64 decimal
+digits and adjusted exponents from -100 through 100. Calculations use a private
+512-digit context; ratios may round at that precision.
