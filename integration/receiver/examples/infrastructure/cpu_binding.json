@@ -9,6 +9,7 @@
   "inventory_expires_at": "2026-09-20T12:05:00Z",
   "memory_bytes": 67108864,
   "namespace_uid": "synthetic-ns-uid",
+  "node_name": "host",
   "node_uid": "host-uid",
   "permission": "not_granted",
   "plan_digest": "sha256:9a6fc6b6df3b0de57b59f576fd1b1200d7004ef53815d67eaac23272c40416bb",

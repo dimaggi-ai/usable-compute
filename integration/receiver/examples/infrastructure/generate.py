@@ -12,14 +12,19 @@ from dimaggi_receiver.jsonio import digest, dumps
 
 
 def topology_fixture(now='2026-09-20T12:00:01Z'):
-    from dimaggi_receiver.topology_watch import WatchStore
-    store = WatchStore(':memory:', 'synthetic-tenant', 'synthetic-cluster', 'nodes')
+    import atexit
+    from tempfile import TemporaryDirectory
+    from dimaggi_receiver.topology_watch import WatchStore, read_current
+    directory = TemporaryDirectory()
+    atexit.register(directory.cleanup)
+    path = Path(directory.name)/'watch.db'
+    store = WatchStore(path, 'synthetic-tenant', 'synthetic-cluster', 'nodes')
     store.relist({'apiVersion': 'v1', 'kind': 'NodeList', 'metadata': {'resourceVersion': '12'},
                   'items': [{'metadata': {'name': 'host', 'uid': 'host-uid', 'resourceVersion': '12'}}]},
                  '2026-09-20T12:00:00Z', '2026-09-20T12:05:00Z')
     store._transaction(lambda value: dict(value, session='synthetic-session'))
-    result = store.snapshot(now)
-    store.close()
+    result = read_current(path, tenant='synthetic-tenant', cluster='synthetic-cluster', collection='nodes', now=now)
+    atexit.register(store.close)
     return result
 
 
@@ -162,7 +167,7 @@ if __name__ == "__main__":
         observations=o,
         expected_objects=expected,
         reconciliation=result,
-        cpu_binding=cpu_binding(r, q, pin, p, now, topology=topology_fixture(now), node_uid='host-uid'),
+        cpu_binding=cpu_binding(r, q, pin, p, now, topology=topology_fixture(now), node_uid='host-uid', tenant='synthetic-tenant'),
         pins={"registry_digest": pin, "as_of": now},
     ).items():
         Path(__file__).with_name(name + ".json").write_text(dumps(value))

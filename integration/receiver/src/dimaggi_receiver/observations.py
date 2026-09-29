@@ -104,7 +104,7 @@ def _identifier(value: Any, field: str) -> str:
 
 def _utc(value: Any) -> datetime:
     if not isinstance(value, str) or not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z", value
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z", value
     ):
         raise ObservationError("timestamps require UTC Z and at most microsecond precision")
     try:

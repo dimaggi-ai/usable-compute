@@ -88,7 +88,7 @@ def run(a):
         topology = read_current(host['WatchStore'], tenant=host['Tenant'],
                                 cluster=host['Deployment']['ClusterID'], collection='nodes', now=now)
         binding = cpu_binding(registry, q, digest(registry), p, now,
-                              topology=topology, node_uid=host['NodeUID'])
+                              topology=topology, tenant=host['Tenant'], node_uid=host['NodeUID'])
         case = root / mode
         case.mkdir(mode=0o700)
         key, cert = case / "proxy.key", case / "proxy.pem"

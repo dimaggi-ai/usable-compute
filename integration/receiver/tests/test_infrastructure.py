@@ -272,7 +272,7 @@ def test_expiry_drift_and_no_auto_activation():
 def test_cpu_binding_scope_and_expiry():
     r, q = fixture.fixtures()
     p = run(r, q)
-    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid')
+    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid', tenant='synthetic-tenant')
     assert b["valid_until"] == "2026-09-20T12:05:00Z"
     assert b["cpu_millicores"] == 500 and b["permission"] == "not_granted"
     with pytest.raises(ValueError):
@@ -344,7 +344,7 @@ def test_stale_shared_budget_refuses_and_limits_binding_expiry():
     assert run(r, q)["status"] == "refused"
     q["budgets"][0]["observed_at"] = "2026-09-20T11:59:00Z"
     p = run(r, q)
-    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid')
+    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid', tenant='synthetic-tenant')
     assert b["valid_until"] == "2026-09-20T12:04:00Z"
 
 
@@ -418,7 +418,6 @@ def test_installed_cli_exact_example_commands(tmp_path):
     t = fixture.topology_fixture()
     store.relist({'apiVersion':'v1', 'kind':'NodeList', 'metadata':{'resourceVersion':'12'},
                   'items':list(t['records'].values())}, t['observed_at'], t['expires_at'])
-    store.close()
     for cmd, args, key, expected in commands:
         result = subprocess.run(
             [sys.executable, "-m", "dimaggi_receiver.cli", cmd, *args],
@@ -428,6 +427,7 @@ def test_installed_cli_exact_example_commands(tmp_path):
         )
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)[key] == expected
+    store.close()
     (tmp_path / "request.json").write_text('{"schema":"a","schema":"b"}')
     result = subprocess.run(
         [sys.executable, "-m", "dimaggi_receiver.cli", "infrastructure-plan", *common],

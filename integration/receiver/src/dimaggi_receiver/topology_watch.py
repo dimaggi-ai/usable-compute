@@ -12,6 +12,8 @@ import re
 import sys
 import time
 import uuid
+import hmac
+import secrets
 from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
@@ -194,6 +196,29 @@ def _snapshot(value, now):
     value['snapshot_id'] = _digest(value)
     return value
 
+_READ_KEY = secrets.token_bytes(32)
+
+
+class CurrentSnapshot(dict):
+    """Process-local reader receipt; serialization does not preserve verification."""
+
+
+def _seal_snapshot(value, path):
+    result = CurrentSnapshot(value)
+    result._path = str(Path(path).resolve())
+    result._seal = hmac.digest(_READ_KEY, (result._path + _digest(value)).encode(), 'sha256')
+    return result
+
+
+def verified_snapshot(value, *, tenant, cluster, now):
+    need(type(value) is CurrentSnapshot, 'verified WatchStore reader receipt required')
+    expected = hmac.digest(_READ_KEY, (value._path + _digest(dict(value))).encode(), 'sha256')
+    need(hmac.compare_digest(value._seal, expected), 'modified WatchStore reader receipt')
+    fresh = read_current(value._path, tenant=tenant, cluster=cluster, collection='nodes', now=now)
+    need(fresh == value, 'WatchStore changed since read')
+    return fresh
+
+
 def read_current(path, *, tenant, cluster, collection, namespace='', now):
     """Read a current collector projection without taking ownership or creating it."""
     try:
@@ -212,7 +237,7 @@ def read_current(path, *, tenant, cluster, collection, namespace='', now):
             result = _snapshot(value, now)
             need(not result['issues'], 'current topology required: ' + ','.join(result['issues']))
             need(re.fullmatch(r'[0-9]{1,32}', result['resource_version']) is not None, 'numeric resource version required')
-            return result
+            return _seal_snapshot(result, path)
     except (sqlite3.Error, KeyError, TypeError, OSError) as exc:
         raise ValueError('current topology unavailable') from exc
 

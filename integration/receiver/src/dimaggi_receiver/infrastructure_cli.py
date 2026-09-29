@@ -64,7 +64,7 @@ def run(a):
         topology = read_current(a.watch_store, tenant=a.tenant, cluster=pool['target_id'],
                                 collection='nodes', namespace='', now=a.as_of)
         return infra.cpu_binding(r, request, a.registry_digest, planned, a.as_of,
-                                 topology=topology, node_uid=a.node_uid)
+                                 topology=topology, node_uid=a.node_uid, tenant=a.tenant)
     return infra.reconcile(
         r,
         request,
