@@ -188,6 +188,10 @@ class ObservationStore:
                 self.db = sqlite3.connect("file:" + quote(str(Path(name).absolute()), safe="/") + "?mode=rw", uri=True)
             else:
                 self.db = sqlite3.connect(name)
+            self.db.execute('PRAGMA synchronous=FULL')
+            if sys.platform == 'darwin':
+                self.db.execute('PRAGMA fullfsync=ON')
+                self.db.execute('PRAGMA checkpoint_fullfsync=ON')
             if self._lock_fd is not None:
                 locked, opened = os.fstat(self._lock_fd), os.stat(name)
                 if (locked.st_dev, locked.st_ino) != (opened.st_dev, opened.st_ino):

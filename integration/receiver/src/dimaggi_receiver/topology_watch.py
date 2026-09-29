@@ -8,6 +8,7 @@ from copy import deepcopy
 import json
 import sqlite3
 import re
+import sys
 from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
@@ -25,6 +26,9 @@ class WatchStore:
         if namespace: _identifier(namespace, 'namespace')
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.execute('PRAGMA synchronous=FULL')
+        if sys.platform == 'darwin':
+            self.db.execute('PRAGMA fullfsync=ON')
+            self.db.execute('PRAGMA checkpoint_fullfsync=ON')
         self.db.execute('CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), body TEXT NOT NULL)')
         if 'digest' not in {row[1] for row in self.db.execute('PRAGMA table_info(projection)')}:
             self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
