@@ -58,7 +58,7 @@ def test_reader_never_requests_database_write_reservation(state, monkeypatch):
 def test_wrong_scope_expiry_changes_neither_store_nor_ledger(state):
     store, path, ledger, start = state
     before = path.read_bytes(), ledger.read_bytes()
-    with patch.object(w.time, 'time', return_value=start+46):
+    with patch.object(w.time, 'time', return_value=start+47):
         with pytest.raises(ValueError, match='scope'):
             read(path, ledger, tenant='wrong')
     assert (path.read_bytes(), ledger.read_bytes()) == before
@@ -92,7 +92,7 @@ def test_unusable_ledger_refuses(state, bad, monkeypatch):
 def test_expired_generation_is_reader_local_and_never_revives(state):
     store, path, ledger, start = state
     before = path.read_bytes()
-    with patch.object(w.time, 'time', return_value=start+46):
+    with patch.object(w.time, 'time', return_value=start+47):
         with pytest.raises(ValueError): read(path, ledger)
     assert path.read_bytes() == before
     with pytest.raises(ValueError): read(path, ledger)
@@ -118,7 +118,7 @@ def test_ledger_validation_uses_open_descriptor(state, monkeypatch):
 
 def test_ledger_keys_include_store_scope_and_generation(state, tmp_path):
     store, path, ledger, start = state
-    with patch.object(w.time, 'time', return_value=start+46):
+    with patch.object(w.time, 'time', return_value=start+47):
         with pytest.raises(ValueError): read(path, ledger)
     replacement, _ = live(path)
     try:

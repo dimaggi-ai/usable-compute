@@ -36,12 +36,8 @@ def test_exact_heartbeat_edges(state, edge, outside):
                 read(path, ledger, now=iso(wall))
         else:
             assert not read(path, ledger, now=iso(wall))['issues']
-    if outside and edge == 'expiry':
-        assert ledger.read_bytes() != before
-        with pytest.raises(ValueError, match='previously expired'): read(path, ledger)
-    else:
-        assert ledger.read_bytes() == before
-        assert not read(path, ledger)['issues']
+    assert ledger.read_bytes() == before
+    assert not read(path, ledger)['issues']
 
 
 def test_closed_future_lease_still_tombstones(state):

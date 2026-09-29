@@ -69,6 +69,9 @@ def test_single_two_second_step_adds_at_most_two_seconds(tmp_path):
         # At real elapsed 47, the unchanged 45-second wall-age boundary refuses.
         with patch.object(w.time, 'time', return_value=start+47-2):
             with pytest.raises(ValueError): read(tmp_path/'w.db')
+        # Age 45 refuses without a permanent claim; age 47 records death.
+        with patch.object(w.time, 'time', return_value=start+47):
+            with pytest.raises(ValueError): read(tmp_path/'w.db')
         with patch.object(w.time, 'time', return_value=start+44):
             with pytest.raises(ValueError): read(tmp_path/'w.db')
     finally: store.close()

@@ -22,7 +22,7 @@ def test_ledger_wait_does_not_block_collector(state, monkeypatch, stall):
     monkeypatch.setattr(w, 'check_generation', check)
     if stall == 'fsync':
         main_thread = threading.get_ident()
-        monkeypatch.setattr(w.time, 'time', lambda: start if threading.get_ident() == main_thread else start+45)
+        monkeypatch.setattr(w.time, 'time', lambda: start if threading.get_ident() == main_thread else start+47)
         fsync = expiry_ledger.os.fsync
         def stalled_sync(fd):
             entered.set()
@@ -33,7 +33,7 @@ def test_ledger_wait_does_not_block_collector(state, monkeypatch, stall):
     store.db.execute('PRAGMA busy_timeout=200')
     with ledger.open('r+') as holder, concurrent.futures.ThreadPoolExecutor(1) as pool:
         if stall == 'lock': fcntl.flock(holder, fcntl.LOCK_EX)
-        job = pool.submit(read, path, ledger, iso(start+45) if stall == 'fsync' else iso(start))
+        job = pool.submit(read, path, ledger, iso(start+47) if stall == 'fsync' else iso(start))
         try:
             assert entered.wait(2)
             began = time.perf_counter()
@@ -67,14 +67,17 @@ def test_changed_database_during_ledger_step_refuses(state, monkeypatch, change)
         read(path, ledger)
 
 
-@pytest.mark.parametrize('age', [45, 46])
-def test_lease_expiring_during_ledger_wait_stays_dead(state, monkeypatch, age):
+@pytest.mark.parametrize('age', [45.1, 47.1])
+def test_renewal_during_ledger_wait_does_not_tombstone(state, monkeypatch, age):
     store, path, ledger, start = state
     original = w.check_generation
     def check(*args):
         original(*args)
+        monkeypatch.setattr(w.time, 'time', lambda: start+44.5)
+        store.heartbeat()
         monkeypatch.setattr(w.time, 'time', lambda: start+age)
     monkeypatch.setattr(w, 'check_generation', check)
-    with pytest.raises(ValueError, match='closed or expired'): read(path, ledger)
-    monkeypatch.setattr(w.time, 'time', lambda: start)
-    with pytest.raises(ValueError, match='previously expired'): read(path, ledger)
+    with pytest.raises(ValueError): read(path, ledger)
+    assert ledger.read_text().count('\n') == 1
+    monkeypatch.setattr(w, 'check_generation', original)
+    assert not read(path, ledger, iso(start+age))['issues']
