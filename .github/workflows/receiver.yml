@@ -73,3 +73,23 @@ jobs:
           if any(int(s.get('skipped', 0)) for s in root.iter('testsuite')):
               raise RuntimeError('unexpected skipped receiver acceptance test')
           PY
+
+  linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            lock: requirements-linux-x86_64-py312.lock
+          - runner: ubuntu-24.04-arm
+            lock: requirements-linux-aarch64-py312.lock
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and install wheel
+        run: bash integration/receiver/tools/qualify_offline.sh integration/receiver/${{ matrix.lock }}
+      - name: Receiver tests
+        run: python -m pytest integration/receiver/tests -q
