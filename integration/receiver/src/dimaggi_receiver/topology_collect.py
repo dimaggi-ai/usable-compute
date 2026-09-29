@@ -3,7 +3,7 @@
 The configured API origin and CA are the trust boundary. A subprocess enforces a
 hard deadline including DNS. Only GET paths assembled here are accepted. Watch
 responses are buffered within a fixed bound, then applied atomically. Overflow
-invalidates the projection. No mutation, retry or automatic version negotiation.
+invalidates the projection. No mutation or automatic version negotiation.
 """
 import json
 import subprocess
@@ -49,18 +49,23 @@ def collect(store, config, *, expires_at, watch=False, clock=lambda: datetime.no
         if namespace: path += 'namespaces/'+quote(namespace, safe='')+'/'
         path += collection
     try:
-        from .observations import _digest
+        from .observations import _digest, _utc
         descriptor=_digest({k:v for k,v in config.items() if k!='bearer_token'})
         if watch:
             prior = store.snapshot(observed_at)
             need(prior['transport_digest']==descriptor, 'TLS source configuration changed; relist required')
-            need(not prior['issues'], 'fresh relist required before watch')
+            if prior['issues'] or (_utc(prior['expires_at']) - _utc(observed_at)).total_seconds() <= config['timeout_seconds'] + 1:
+                watch = False
+        if watch:
             path += '?'+urlencode({'watch':'true','allowWatchBookmarks':'true',
                 'resourceVersion':prior['resource_version'],'timeoutSeconds':max(1, config['timeout_seconds']-2)})
         else:
             path += '?limit=10000'
         store.heartbeat()
         response = fetch(config, path)
+        if watch and response['status'] == 410:
+            store._transaction(store._disconnect)
+            return collect(store, config, expires_at=expires_at, clock=clock)
         need(response['status'] == 200, 'resource version expired: relist required')
         from .observations import _utc
         finished=clock().isoformat().replace('+00:00','Z')
@@ -69,7 +74,11 @@ def collect(store, config, *, expires_at, watch=False, clock=lambda: datetime.no
         if watch:
             lines = body.splitlines()
             need(len(lines) <= 1024 and all(line.strip() for line in lines), 'watch frame bound refused')
-            store.apply([loads(line) for line in lines], observed_at, expires_at)
+            events = [loads(line) for line in lines]
+            if any(event.get('type') == 'ERROR' and event.get('object', {}).get('code') == 410 for event in events):
+                store._transaction(store._disconnect)
+                return collect(store, config, expires_at=expires_at, clock=clock)
+            store.apply(events, observed_at, expires_at)
         else:
             store.transport_digest=descriptor
             store.relist(loads(body), observed_at, expires_at)
