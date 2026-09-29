@@ -35,7 +35,8 @@ def test_canonical_open_replacement_checks_descriptor_identity(published, monkey
     store, path, ledger = published
     connect = sqlite3.connect
     fired = False
-    def canonical(uri, *args, **kwargs):
+    def canonical(database, *args, **kwargs):
+        uri = database
         nonlocal fired
         if isinstance(uri, str) and uri.startswith('file:/proc/self/fd/') and not fired:
             fired = True
