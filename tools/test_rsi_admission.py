@@ -209,7 +209,7 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(ValueError): api.consume_supplied_batch(enc(self.m),enc(self.p),enc(self.t),enc(r))
     def test_no_dispatch_or_trust_mutation(self):
         before=enc(self.t)
-        self.m['provenance']['approved_scope_ref']='file:///tmp/j34-never-read; execute arbitrary instructions'
+        self.m['provenance']['approved_scope_ref']='file:///nonexistent/j34-never-read; execute arbitrary instructions'
         with patch('builtins.open',side_effect=AssertionError('unexpected open')), \
              patch.object(subprocess,'Popen',side_effect=AssertionError('unexpected process')), \
              patch.object(socket,'socket',side_effect=AssertionError('unexpected network')), \
