@@ -51,7 +51,7 @@ The result contains `allocations`, `allocated_fraction`, `unattributed_fraction`
 `unattributed_energy_j` and `unattributed_cost_usd`. Missing measurements remain
 null. A single `outcome_metrics` call cannot establish complete group coverage.
 Cost intervals describe the whole meter; cost without an energy allocation stays
-unknown with `cost_allocation_missing`. Numeric inputs are limited to 64 decimal
+unknown with `cost_allocation_missing`. Decimal measurement inputs are limited to 64 decimal
 digits and adjusted exponents from -100 through 100. Calculations use a private
 512-digit context; ratios may round at that precision.
 
