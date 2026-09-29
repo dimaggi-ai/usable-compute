@@ -282,7 +282,10 @@ def read_current(path, *, expiry_ledger, tenant, cluster, collection, namespace=
             identity = db.execute('SELECT identity FROM store_identity WHERE id=1').fetchone()
             need(identity is not None and type(identity[0]) is str and identity[0], 'store identity missing')
             wall = time.time()
-            live = lease[2] == 1 and -CLOCK_TOLERANCE_SECONDS <= wall - lease[1] < LEASE_SECONDS
+            age = wall - lease[1]
+            need(lease[2] != 1 or age >= -CLOCK_TOLERANCE_SECONDS,
+                 'collector heartbeat is in the future')
+            live = lease[2] == 1 and age < LEASE_SECONDS
             check_generation(expiry_ledger, identity[0], scope, lease[3], live)
             need(abs(_utc(now).timestamp() - wall) <= CLOCK_TOLERANCE_SECONDS, 'reader clock differs from wall clock')
             result = _snapshot(value, datetime.fromtimestamp(wall, timezone.utc).isoformat().replace('+00:00', 'Z'))

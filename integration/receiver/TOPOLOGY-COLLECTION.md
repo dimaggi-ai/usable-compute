@@ -54,9 +54,16 @@ generation, even if the clock rolls back or the collector rewrites that lease.
 Reader observations do not close the collector's lease. The collector independently
 refuses expired generations; a new acquisition still requires a new relist.
 
-`close()` closes the collector lease. A reader records a heartbeat more than two seconds in the future or one
-at least 45 seconds old as dead in its ledger; a collector durably closes its own
-lease on either observation. A later wall-clock rollback cannot undo either record. Collectors also refuse renewal after
+`close()` closes the collector lease. A reader records a closed lease or a
+heartbeat at least 45 seconds old as dead in its ledger. A heartbeat more than
+two seconds in the future refuses that read with `collector heartbeat is in the
+future`, without writing to the ledger. Correct the clock disagreement and retry;
+the same live generation can be read once its heartbeat and projection are current.
+The collector never sees reader observations. If a reader records genuine expiry,
+a later backward clock step cannot revive that generation, even if the collector
+keeps renewing. Restart the collector to acquire a new generation and relist;
+retain the ledger. The collector durably closes its own lease when its own checks
+detect expiry or excessive future skew. Collectors also refuse renewal after
 45 seconds of monotonic elapsed time since their last checked renewal. Heartbeat
 persists the wall time sampled in its owner check and re-checks monotonic elapsed
 time immediately before commit. A pause after that last check can delay commit,
@@ -84,8 +91,8 @@ Clock integrity and physical truth remain trusted inputs.
 Heartbeat age accepts the interval from -2 seconds through less than 45 seconds.
 The same two-second tolerance applies to caller `now`. A single backward step of
 at most two seconds adds at most two seconds to apparent lease liveness; the
-45-second upper age boundary is unchanged. Larger future skew marks the generation
-dead, and the tolerance never revives a recorded dead generation. Projection
+45-second upper age boundary is unchanged. Larger future skew refuses only that read; the tolerance never revives a
+recorded dead generation. Projection
 freshness stays strict: a future observation can temporarily refuse a read without
 killing the lease. Repeated unobserved clock corrections still have no finite
 real-elapsed bound.

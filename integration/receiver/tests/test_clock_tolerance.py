@@ -29,7 +29,7 @@ def test_small_backward_step_does_not_kill_generation(tmp_path, step):
 
 @pytest.mark.parametrize('observer', ['reader', 'collector'])
 @pytest.mark.parametrize('step', [2.001, 10])
-def test_larger_backward_step_never_revives(tmp_path, observer, step):
+def test_larger_backward_step_reader_recovers_collector_stays_closed(tmp_path, observer, step):
     start = w._utc(T).timestamp()
     with patch.object(w.time, 'time', return_value=start): store, _ = live(tmp_path/'w.db')
     try:
@@ -38,7 +38,10 @@ def test_larger_backward_step_never_revives(tmp_path, observer, step):
                 if observer == 'reader': read(tmp_path/'w.db')
                 else: store.heartbeat()
         with patch.object(w.time, 'time', return_value=start+5):
-            with pytest.raises(ValueError): read(tmp_path/'w.db')
+            if observer == 'reader':
+                assert not read(tmp_path/'w.db')['issues']
+            else:
+                with pytest.raises(ValueError): read(tmp_path/'w.db')
             if observer == 'collector':
                 with pytest.raises(ValueError): store.heartbeat()
     finally: store.close()
