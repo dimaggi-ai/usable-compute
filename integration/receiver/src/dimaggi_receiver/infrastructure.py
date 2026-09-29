@@ -659,7 +659,7 @@ def cpu_binding(registry, request, expected_digest, planned, as_of, *, topology=
     from .topology import MaxBindingValidity
 
     from .topology import current
-    from .observations import _digest
+    from .observations import _digest, _utc
     import re
 
     if not isinstance(topology, dict) or topology.get('schema') != 'dimaggi-kubernetes-watch/v1':
@@ -680,8 +680,8 @@ def cpu_binding(registry, request, expected_digest, planned, as_of, *, topology=
     if len(nodes) != 1:
         raise ValueError('selected node UID absent or ambiguous')
     expiry = min(
-        stamp(topology["expires_at"]),
-        stamp(topology["observed_at"]) + timedelta(seconds=MaxBindingValidity),
+        _utc(topology["expires_at"]),
+        _utc(topology["observed_at"]) + timedelta(seconds=MaxBindingValidity),
         stamp(as_of) + timedelta(seconds=MaxBindingValidity),
         stamp(p["observed_at"]) + timedelta(seconds=MaxBindingValidity),
         stamp(profile["valid_until"]),
@@ -692,6 +692,7 @@ def cpu_binding(registry, request, expected_digest, planned, as_of, *, topology=
             if b["id"] in p["budget_ids"]
         ),
     )
+    expiry = expiry.replace(microsecond=0)
     if expiry <= stamp(as_of):
         raise ValueError('CPU binding validity exhausted')
     return dict(

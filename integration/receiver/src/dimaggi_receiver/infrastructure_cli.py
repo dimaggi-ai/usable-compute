@@ -58,6 +58,8 @@ def run(a):
     if a.command == "infrastructure-cpu-binding":
         from .topology_watch import read_current
         planned = read(a.plan)
+        if planned != infra.plan(r, request, a.registry_digest, a.as_of) or planned['status'] != 'compatible':
+            raise ValueError('a current reproducible compatible plan is required')
         pool = next(p for p in request['pools'] if p['id'] == planned['allocations'][0]['pool_id'])
         topology = read_current(a.watch_store, tenant=a.tenant, cluster=pool['target_id'],
                                 collection='nodes', namespace='', now=a.as_of)

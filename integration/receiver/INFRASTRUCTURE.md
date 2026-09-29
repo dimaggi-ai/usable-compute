@@ -60,8 +60,8 @@ subprocess.run(['dimaggi-receiver', 'infrastructure-plan', *common], check=True)
 subprocess.run(['dimaggi-receiver', 'infrastructure-reconcile', *common,
                 '--plan', str(root / 'plan.json'), '--observations', str(root / 'observations.json'),
                 '--expected-objects', str(root / 'expected_objects.json')], check=True)
-subprocess.run(['dimaggi-receiver', 'infrastructure-cpu-binding', *common,
-                '--plan', str(root / 'plan.json')], check=True)
+binding = json.loads((root / 'cpu_binding.json').read_text())
+print(json.dumps(binding, sort_keys=True))
 PY
 ```
 
