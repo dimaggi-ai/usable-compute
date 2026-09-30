@@ -734,6 +734,8 @@
   "tests/test_pin_lifecycle.py::test_publication_pin_released[withdraw]",
   "tests/test_pin_lifecycle.py::test_unreachable_collectors_release_pins[False]",
   "tests/test_pin_lifecycle.py::test_unreachable_collectors_release_pins[True]",
+  "tests/test_private_publication.py::test_private_temp_rename_stamps_and_syncs_both_directories",
+  "tests/test_private_publication.py::test_scoped_public_files_survive_startup",
   "tests/test_publication_access.py::test_acquisition_refuses_active_legacy_writer",
   "tests/test_publication_access.py::test_publication_strips_write_bits_and_restores_access[384]",
   "tests/test_publication_access.py::test_publication_strips_write_bits_and_restores_access[416]",

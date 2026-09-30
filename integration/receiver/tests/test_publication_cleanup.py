@@ -30,11 +30,11 @@ def test_restart_cleans_only_owned_regular_inactive_temps(published):
     import fcntl
     store, path, ledger = published
     store.close()
-    residue = path.parent/(store._temporary_prefix()+'crashed1')
+    residue = Path(store.writer_path).parent/(store._temporary_prefix()+'crashed1')
     residue.write_bytes(b'x'*65536)
     outside = path.parent/'keep'; outside.write_text('untouched')
-    link = path.parent/(store._temporary_prefix()+'symlink1'); link.symlink_to(outside)
-    active = path.parent/(store._temporary_prefix()+'active01'); active.touch()
+    link = Path(store.writer_path).parent/(store._temporary_prefix()+'symlink1'); link.symlink_to(outside)
+    active = Path(store.writer_path).parent/(store._temporary_prefix()+'active01'); active.touch()
     with active.open('rb') as held:
         fcntl.flock(held, fcntl.LOCK_EX)
         replacement = w.WatchStore(path, 't', 'c', 'nodes')
@@ -81,7 +81,7 @@ def test_cleanup_preserves_other_stores_and_operator_files(published):
         keep = [path.parent/'.watch-notes.txt', path.parent/(other._temporary_prefix()+'abcdefgh'),
                 path.parent/'.watch-abcdefghi', path.parent/'.watch-ABCDEFGH',
                 path.parent/'.watch-notes_01', path.parent/'.watch-ab12_cd3']
-        remove = [path.parent/(store._temporary_prefix()+'abcdefgh')]
+        remove = [Path(store.writer_path).parent/(store._temporary_prefix()+'abcdefgh')]
         for item in keep + remove: item.write_text('retain or clean')
         store._clean_temporary_copies()
         assert foreign.exists()

@@ -176,8 +176,9 @@ class WatchStore:
                 os.close(fd)
 
     def _check_rename_ctime(self):
-        fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
-        target = source + '-probe'
+        fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
+        target_fd, target = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
+        os.close(target_fd)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             initial = os.stat(source).st_ctime_ns
@@ -202,7 +203,7 @@ class WatchStore:
         return '.watch-' + uuid.uuid5(uuid.NAMESPACE_URL, self.path).hex + '-'
 
     def _clean_temporary_copies(self):
-        for path in Path(self.path).parent.glob('.watch-*'):
+        for path in Path(self.writer_path).parent.glob('.watch-*'):
             if not path.name.startswith(self._temporary_prefix()):
                 continue
             try:
@@ -211,8 +212,7 @@ class WatchStore:
                     continue
                 fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                 try:
-                    # Other stores may publish in this directory concurrently.
-                    # Never wait for their temporary inode; clean crash residue only.
+                    # Clean crash residue without waiting for an active copy.
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     current = os.fstat(fd)
                     if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
@@ -242,7 +242,7 @@ class WatchStore:
         # conflict with backup, checkpoint, fsync or replacement of this file.
         target = Path(self.path)
         access = self.publication_access
-        fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=target.parent)
+        fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
         pin = None
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -260,11 +260,12 @@ class WatchStore:
             fcntl.flock(fd, fcntl.LOCK_UN)
             self._publication_pin = pin
             self._published_fd = pin.fileno()
-            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            for parent in (target.parent, Path(self.writer_path).parent):
+                directory = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
         finally:
             os.close(fd)
             Path(temporary).unlink(missing_ok=True)
