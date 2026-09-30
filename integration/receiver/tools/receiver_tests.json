@@ -810,6 +810,8 @@
   "tests/test_publication_evidence.py::test_late_rename_refused_without_death",
   "tests/test_publication_evidence.py::test_path_replacement_cannot_substitute_inode_evidence",
   "tests/test_publication_evidence.py::test_projection_write_renews_checked_heartbeat",
+  "tests/test_publication_evidence.py::test_publication_stage_marker_precedes_kernel_stop[file_fsync]",
+  "tests/test_publication_evidence.py::test_publication_stage_marker_precedes_kernel_stop[replace]",
   "tests/test_publication_evidence.py::test_stopped_publication_is_never_late_current[backup]",
   "tests/test_publication_evidence.py::test_stopped_publication_is_never_late_current[bound]",
   "tests/test_publication_evidence.py::test_stopped_publication_is_never_late_current[commit]",

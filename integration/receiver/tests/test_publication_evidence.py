@@ -44,7 +44,7 @@ def test_late_rename_refused_without_death(published):
 
 
 @pytest.mark.parametrize('phase', ['commit', 'backup', 'file_fsync', 'replace', 'directory_fsync', 'bound'])
-def test_stopped_publication_is_never_late_current(tmp_path, phase):
+def test_stopped_publication_is_never_late_current(tmp_path, phase, stop_delay=0):
     # Each phase stops once before rename until H is late, then once after rename
     # before collector retirement. The parent reads at both actual SIGSTOPs.
     code = r'''
@@ -58,7 +58,9 @@ s.relist({'apiVersion':'v1','kind':'NodeList','metadata':{'resourceVersion':'1'}
 phase=sys.argv[2]; fired=set()
 def stop(key):
  if key not in fired:
-  fired.add(key); print(key,flush=True); os.kill(os.getpid(),signal.SIGSTOP)
+  fired.add(key); print(key,flush=True)
+  if key == "after": time.sleep(float(sys.argv[3]))
+  os.kill(os.getpid(),signal.SIGSTOP)
 db=s.db
 class Proxy:
  def __getattr__(self,k): return getattr(db,k)
@@ -94,12 +96,20 @@ s.close()
 '''
     path, ledger = tmp_path/'db', tmp_path/'ledger'
     w.initialize_expiry_ledger(ledger)
-    p = subprocess.Popen([sys.executable, '-c', code, str(path), phase],
+    p = subprocess.Popen([sys.executable, '-c', code, str(path), phase, str(stop_delay)],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     import select
     def stage(expected):
         assert select.select([p.stdout], [], [], 5)[0]
         assert p.stdout.readline().strip() == expected
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            pid, status = os.waitpid(p.pid, os.WUNTRACED | os.WNOHANG)
+            if pid:
+                assert os.WIFSTOPPED(status) and os.WSTOPSIG(status) == signal.SIGSTOP
+                return
+            time.sleep(0.001)
+        pytest.fail('child did not stop after stage marker')
     try:
         stage('before')
         assert not read(path, ledger)['issues']
@@ -187,3 +197,8 @@ def test_first_open_publication_has_checked_kernel_stamp(tmp_path, migrate):
         assert stamp-lease[1] <= w.COMMIT_BOUND_SECONDS
     finally:
         store.close()
+
+
+@pytest.mark.parametrize('phase', ['file_fsync', 'replace'])
+def test_publication_stage_marker_precedes_kernel_stop(tmp_path, phase):
+    test_stopped_publication_is_never_late_current(tmp_path, phase, stop_delay=0.1)
