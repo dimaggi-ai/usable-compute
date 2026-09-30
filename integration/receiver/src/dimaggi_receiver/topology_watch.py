@@ -118,6 +118,7 @@ class WatchStore:
             self.lost = False
             self._retired_published = False
             self._published_fd = None
+            self._publication_pin = None
             self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
             if 'generation' not in {row[1] for row in self.db.execute('PRAGMA table_info(lease)')}:
                 self.db.execute('ALTER TABLE lease ADD COLUMN generation TEXT')
@@ -231,6 +232,7 @@ class WatchStore:
             # If unlink also fails, propagate it and leave close retryable.
             if self.path is not None:
                 Path(self.path).unlink(missing_ok=True)
+            self._release_publication()
             raise
 
     def _publish_snapshot(self):
@@ -241,6 +243,7 @@ class WatchStore:
         target = Path(self.path)
         access = self.publication_access
         fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=target.parent)
+        pin = None
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.fchmod(fd, 0o600)
@@ -248,13 +251,15 @@ class WatchStore:
                 self.db.backup(copy)
                 copy.execute('PRAGMA journal_mode=DELETE')
             os.fsync(fd)
+            pin = open(temporary, 'rb')
             os.fchown(fd, -1, access[1])
             os.fchmod(fd, access[0] & 0o555)
             self._remove_public_journals()
             os.replace(temporary, target)
             self._release_publication()
             fcntl.flock(fd, fcntl.LOCK_UN)
-            self._published_fd = os.dup(fd)
+            self._publication_pin = pin
+            self._published_fd = pin.fileno()
             directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory)
@@ -263,13 +268,22 @@ class WatchStore:
         finally:
             os.close(fd)
             Path(temporary).unlink(missing_ok=True)
+            if pin is not None and pin is not self._publication_pin:
+                pin.close()
 
     def _release_publication(self):
         if self._published_fd is not None:
-            os.close(self._published_fd)
+            self._publication_pin.close()
+            self._publication_pin = None
             self._published_fd = None
 
     def _withdraw(self, owns):
+        try:
+            self._withdraw_publication(owns)
+        finally:
+            self._release_publication()
+
+    def _withdraw_publication(self, owns):
         if self._retired_published:
             return
         if self.path is None:
