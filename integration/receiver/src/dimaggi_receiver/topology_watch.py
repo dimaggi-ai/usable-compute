@@ -91,6 +91,7 @@ class WatchStore:
             os.close(fd)
         with _lease_lock(self.writer_path, writer=True), self._legacy_writer_guard():
             if self.path is not None:
+                self._check_publication_access()
                 self._check_rename_ctime()
             migrate = self.writer_path is not None and not Path(self.writer_path).exists() and Path(self.path).exists()
             self.db = sqlite3.connect(self.writer_path or ':memory:', timeout=5, isolation_level=None)
@@ -202,6 +203,18 @@ class WatchStore:
             return device, int(fields['mnt_id'])
         finally:
             os.close(fd)
+
+    def _check_publication_access(self):
+        parent = Path(self.path).parent
+        need(os.access(parent, os.W_OK | os.X_OK, effective_ids=True),
+             'publication directory requires write and search access')
+        directory = parent.stat()
+        if directory.st_mode & stat.S_ISVTX and directory.st_uid != os.geteuid():
+            try:
+                target = os.stat(self.path, follow_symlinks=False)
+            except FileNotFoundError:
+                return
+            need(target.st_uid == os.geteuid(), 'publication replacement denied by sticky directory')
 
     def _check_rename_ctime(self):
         need(self._mount_identity(Path(self.writer_path).parent) ==
