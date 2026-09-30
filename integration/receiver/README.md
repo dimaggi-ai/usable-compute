@@ -323,6 +323,9 @@ Supply the configuration on every restart. An explicit group must be the
 collector’s effective group or one of its supplementary groups; construction
 refuses other groups before creating files. Write bits are always stripped;
 on-disk permissions and any legacy `publication_access` table are ignored.
+Modes from 0000 through 0777 are accepted, with write bits stripped. Modes
+without owner read are supported; they can prevent the collector identity from
+reading the public snapshot, but do not prevent private crash-copy cleanup.
 To revoke a configured grant, change the configuration and restart the collector;
 chmod alone does not change configuration. ACLs are not retained.
 Readers take no collector locks. Failure handling follows this table:
@@ -339,14 +342,23 @@ Readers take no collector locks. Failure handling follows this table:
 After unlink, readers refuse as unavailable without adding tombstones.
 If unlink fails too, the error propagates and the old snapshot may serve until
 age 45 seconds; close remains retryable. A crash can leave the last complete snapshot
-readable until its cutoff, plus a temp copy. Temporary copies are created inside
-the collector-owned 0700 `<database>.collector/` directory. Under the collector
-lock, startup cleans regular, inactive copies only there; it never
+readable until its cutoff, plus a temp copy. Temporary copies and both startup
+probe files are created inside the collector-owned 0700 `<database>.collector/`
+directory. Under the writer lock, startup cleans matching, collector-owned
+regular copies only there, temporarily restoring owner read when needed to check
+the copy lock. Locked copies retain their modes; symlinks, hardlinks and other
+nonregular entries are preserved. Cleanup I/O errors warn without blocking startup.
+Cleanup and publication hold the same exclusive writer lock and cannot overlap. Startup never
 scans the public directory for `.watch-*` cleanup. Public files with that prefix
 are preserved, including scoped names: a name cannot prove temp provenance. For a one-time migration,
 stop collectors, identify leftover copies from the old installation, and remove
 only files confirmed to be temporary. Do not remove other stores’ publications
-or operator files. Startup refuses a held legacy
+or operator files. The private directory and publication must share a filesystem
+and mount; a separate bind mount is unsupported even with the same device number.
+Linux startup checks mount IDs through `/proc/self/fdinfo`; that procfs access is
+required. EXDEV during publication raises the same mount-requirement error. Both directories are synced
+after rename. The private rename probe checks ctime advancement on this filesystem;
+it does not verify timestamp-error tolerance or power-loss durability. Startup refuses a held legacy
 lease lock; otherwise it removes that lock and stale journals after migration
 backup. Read-only modes block ordinary legacy writes, but root or an owner
 changing permissions can bypass them. Stop old collectors and upgrade together.

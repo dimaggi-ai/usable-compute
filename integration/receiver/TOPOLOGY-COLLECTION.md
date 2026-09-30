@@ -113,13 +113,23 @@ cannot distinguish in-place writes reliably, so readers do not use that test. On
 the collector imports an existing database into its private directory, starts a
 new generation, and requires a relist. After backup it removes public `-wal`,
 `-shm` and `-journal` residue; publication also removes those names before rename.
-Temporary copies are created inside the collector-owned 0700
-`<database>.collector/` directory. Startup under the collector lock cleans regular,
-inactive copies only there. It never scans the public directory for `.watch-*`
+Temporary copies and both startup probe files are created inside the
+collector-owned 0700 `<database>.collector/` directory. Under the writer lock,
+startup cleans matching, collector-owned regular copies only there. Modes from
+0000 through 0777 are accepted, with write bits stripped. Cleanup temporarily
+restores owner read to inspect a copy's lock, so crash residue with mode 0000
+can also be removed. Locked copies retain their modes; symlinks, hardlinks and other
+nonregular entries are preserved. Cleanup and publication hold the same exclusive writer lock and cannot overlap. Cleanup I/O errors warn without blocking startup. Modes
+without owner read can prevent the collector identity from reading the public
+snapshot; they do not block private crash-copy cleanup.
+Startup never scans the public directory for `.watch-*`
 cleanup, including scoped names: a name cannot prove temp provenance. For a one-time migration,
 stop collectors, identify leftover copies from the old installation, and remove
-only confirmed temporary files. Rename stays on the same filesystem; publication
-syncs both the public and private directories. Live copies hold
+only confirmed temporary files. The private directory and publication must share
+a filesystem and mount. A separate bind mount is unsupported even with the same
+device number. Linux startup compares mount IDs through `/proc/self/fdinfo`;
+that procfs access is required. EXDEV during publication raises the same mount-requirement error.
+Publication syncs both the public and private directories. Live copies hold
 a lock that cleanup never waits for. Copies remain 0600 through data fsync, then receive the
 published mode/group immediately before rename. POSIX ACLs are not preserved.
 New readers require the publication-protocol marker. Keep the private directory with its published snapshot during backup and
@@ -170,8 +180,12 @@ tombstone. The lower bound detects H ahead of the rename timestamp after a
 backward collector wall step. It does not solve arbitrary clock corrections.
 The 10-second claim holds up to the filesystem's timestamp granularity.
 
-At acquisition a probe is renamed in the published directory until its ctime
-advances beyond its pre-rename sample. The loop has a two-second deadline to
+At acquisition a probe is renamed from one private name to another until its ctime
+advances beyond its pre-rename sample. The mount check confirms that the publication directory
+is on the same mounted filesystem as the private directory. Same-directory and cross-directory
+renames update inode ctime on supported filesystems; a regression test checks the
+actual private-to-public rename. This startup witness is not a timestamp-error
+bound or verification of every filesystem. The loop has a two-second deadline to
 allow for filesystem timestamp granularity; if ctime does not advance, startup
 refuses. Readers use ctime from the
 pre-read fstat. This is a tighter witness than a later sample if chmod or unlink
