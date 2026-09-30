@@ -115,3 +115,61 @@ def test_publisher_holds_exclusive_temp_lock(published, monkeypatch):
     monkeypatch.setattr(os, 'fsync', sync)
     store.heartbeat()
     assert len(checked) == 1
+
+
+@pytest.mark.parametrize('violation', ['ctime', 'future'])
+def test_first_sample_refuses_before_later_clock_recovery(published, monkeypatch, violation):
+    _, path, ledger = published
+    original = w._read_rows
+    calls = 0
+    def rows(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        result = list(original(*args, **kwargs))
+        if calls == 1:
+            if violation == 'ctime': result[5] = result[3][1] + 11
+            else: result[0] = result[1] = result[3][1] - 3
+        return tuple(result)
+    monkeypatch.setattr(w, '_read_rows', rows)
+    before = ledger.read_bytes()
+    with pytest.raises(ValueError, match='publication|future'): read(path, ledger)
+    assert calls == 1 and ledger.read_bytes() == before
+
+
+def test_second_sample_refuses_backward_reader_clock(published, monkeypatch):
+    from test_publication_evidence import iso
+    store, path, ledger = published
+    now = time.time()
+    store._transaction(lambda value: dict(value, observed_at=iso(now-30)))
+    h = store.db.execute('SELECT heartbeat FROM lease').fetchone()[0]
+    original = w.check_generation
+    calls = 0
+    def check(*args):
+        nonlocal calls
+        calls += 1
+        result = original(*args)
+        if calls == 2: monkeypatch.setattr(w.time, 'time', lambda: h-3)
+        return result
+    monkeypatch.setattr(w, 'check_generation', check)
+    before = ledger.read_bytes()
+    with pytest.raises(ValueError, match='future'):
+        w.read_current(path, expiry_ledger=ledger, tenant='t', cluster='c',
+                       collection='nodes', now=iso(h-3))
+    assert ledger.read_bytes() == before
+
+
+def test_second_sample_refuses_small_heartbeat_regression(published, monkeypatch):
+    store, path, ledger = published
+    original = w._read_rows
+    calls = 0
+    def rows(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            store.db.execute('UPDATE lease SET heartbeat=heartbeat-0.1')
+            store._publish()
+        return original(*args, **kwargs)
+    monkeypatch.setattr(w, '_read_rows', rows)
+    before = ledger.read_bytes()
+    with pytest.raises(ValueError, match='watch changed'): read(path, ledger)
+    assert ledger.read_bytes() == before
