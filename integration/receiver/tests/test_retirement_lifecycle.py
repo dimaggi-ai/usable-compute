@@ -37,5 +37,3 @@ def test_close_preserves_published_retirement(published, monkeypatch, retirement
     restored.write_bytes(old)
     os.replace(restored, path)
     with pytest.raises(ValueError, match='previously expired'): read(path, ledger)
-
-

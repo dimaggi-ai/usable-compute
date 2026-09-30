@@ -55,5 +55,3 @@ def test_unreachable_collectors_release_pins(tmp_path, obsolete):
     assert all(ref() is None for ref in refs)
     assert len(os.listdir('/proc/self/fd' if Path('/proc/self/fd').exists() else '/dev/fd')) == baseline
     assert (path if obsolete else tmp_path/'7').read_bytes() == before
-
-
