@@ -104,3 +104,29 @@ def test_strict_timestamp_positive(text):
 def test_strict_timestamp_negative(text):
     for parser in (stamp, _utc):
         with pytest.raises(ValueError): parser(text)
+
+
+@pytest.mark.parametrize('text', [
+    '2026-12-31T24:00:00Z', '2024-02-29T24:00:00.000000Z',
+    '2026-09-20T24:01:00Z', '2026-09-20T23:60:00Z',
+    '2026-09-20T23:59:60Z', '2026-09-20T12:05:00',
+    '20260920T120500Z', '2026-W38-7T12:05:00Z',
+    '2026-09-20T12:05Z', '2026-09-20T12:05:00.Z',
+    '2026-09-20T12:05:00Z\n', '0000-01-01T00:00:00Z',
+    '2025-02-29T00:00:00Z', '2026-13-01T00:00:00Z',
+])
+def test_timestamp_calendar_and_grammar_refusal(text):
+    for parser in (stamp, _utc):
+        with pytest.raises(ValueError):
+            parser(text)
+
+
+@pytest.mark.parametrize('text, parts', [
+    ('0001-01-01T00:00:00Z', (1, 1, 1, 0, 0, 0, 0)),
+    ('9999-12-31T23:59:59.999999Z', (9999, 12, 31, 23, 59, 59, 999999)),
+    ('2024-02-29T23:59:59.1Z', (2024, 2, 29, 23, 59, 59, 100000)),
+])
+def test_timestamp_preserves_calendar_fields(text, parts):
+    from datetime import datetime, timezone
+    for parser in (stamp, _utc):
+        assert parser(text) == datetime(*parts, tzinfo=timezone.utc)

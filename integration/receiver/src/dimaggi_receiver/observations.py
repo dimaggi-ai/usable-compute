@@ -16,7 +16,7 @@ import sqlite3
 import stat
 import struct
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from urllib.parse import quote
@@ -108,7 +108,12 @@ def _utc(value: Any) -> datetime:
     ):
         raise ObservationError("timestamps require UTC Z and at most microsecond precision")
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime(
+            int(value[:4]), int(value[5:7]), int(value[8:10]),
+            int(value[11:13]), int(value[14:16]), int(value[17:19]),
+            int(value[20:-1].ljust(6, "0")) if value[19] == "." else 0,
+            tzinfo=timezone.utc,
+        )
     except ValueError as exc:
         raise ObservationError("invalid UTC timestamp") from exc
 
