@@ -131,7 +131,8 @@ stop collectors, identify leftover copies from the old installation, and remove
 only confirmed temporary files. The private directory and publication must share
 a filesystem and mount. A separate bind mount is unsupported even with the same
 device number. Linux startup compares mount IDs through `/proc/self/fdinfo`;
-that procfs access is required. EXDEV during publication raises the same mount-requirement error.
+missing or unreadable mount identity metadata refuses startup with
+`procfs mount identity access required` before lease acquisition. EXDEV during publication raises the same mount-requirement error.
 Publication syncs both the public and private directories. Live copies hold
 a lock that cleanup never waits for. Copies remain 0600 through data fsync, then receive the
 published mode/group immediately before rename. POSIX ACLs are not preserved.

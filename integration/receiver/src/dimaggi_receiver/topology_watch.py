@@ -24,7 +24,7 @@ import warnings
 from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
-from .observations import _identifier, _utc, _digest
+from .observations import _identifier, _utc, _digest, ObservationError
 from .expiry_ledger import check_generation, initialize_expiry_ledger
 
 # Forty-five seconds permits the bounded 31-second TLS call plus scheduling slack.
@@ -209,9 +209,12 @@ class WatchStore:
                 return device
             # st_dev cannot distinguish bind mounts. The descriptor identifies
             # the mount actually traversed, without parsing escaped pathnames.
-            fields = dict(line.split(':', 1) for line in
-                          Path(f'/proc/self/fdinfo/{fd}').read_text().splitlines())
-            return device, int(fields['mnt_id'])
+            try:
+                fields = dict(line.split(':', 1) for line in
+                              Path(f'/proc/self/fdinfo/{fd}').read_text().splitlines())
+                return device, int(fields['mnt_id'])
+            except (OSError, KeyError, ValueError):
+                need(False, 'procfs mount identity access required')
         finally:
             os.close(fd)
 
@@ -433,7 +436,7 @@ class WatchStore:
             need(self._mount_identity(Path(self.writer_path).parent) ==
                  self._mount_identity(Path(self.path).parent),
                  'collector directory and publication require the same filesystem and mount')
-        except (OSError, KeyError) as error:
+        except (OSError, KeyError, ObservationError):
             need(False, 'collector publication placement unavailable')
 
     @contextmanager

@@ -117,8 +117,8 @@ stop collectors, identify leftover copies from the old installation, and remove
 only files confirmed to be temporary. Do not remove other stores’ publications
 or operator files. The private directory and publication must share a filesystem
 and mount; a separate bind mount is unsupported even with the same device number.
-Linux startup checks mount IDs through `/proc/self/fdinfo`; that procfs access is
-required. EXDEV during publication raises the same mount-requirement error. Both directories are synced
+Linux startup checks mount IDs through `/proc/self/fdinfo`; missing or unreadable mount identity metadata refuses startup with
+`procfs mount identity access required` before lease acquisition. EXDEV during publication raises the same mount-requirement error. Both directories are synced
 after rename. The private rename probe checks ctime advancement on this filesystem;
 it does not verify timestamp-error tolerance or power-loss durability. Startup refuses a held legacy
 lease lock; otherwise it removes that lock and stale journals after migration
