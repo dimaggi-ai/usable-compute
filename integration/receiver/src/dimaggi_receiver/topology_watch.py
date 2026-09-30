@@ -79,6 +79,7 @@ class WatchStore:
         self.path = None if str(path) == ':memory:' else str(Path(path).resolve())
         self.writer_path = None
         if self.path is not None:
+            self._check_publication_access()
             directory = Path(self.path + '.collector')
             try:
                 directory.mkdir(mode=0o700)

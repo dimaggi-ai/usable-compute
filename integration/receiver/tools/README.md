@@ -80,7 +80,7 @@ regular copies only there, temporarily restoring owner read when needed to check
 the copy lock. Locked copies retain their modes; symlinks, hardlinks and other
 nonregular entries are preserved. Per-entry cleanup exceptions warn and leave startup running; process cancellation still propagates. Linux cleanup uses a verified no-follow descriptor to change only the crash copy's mode, even when no-follow path chmod is unsupported. If cleanup or mode restoration fails, the warning requires operator attention; deletion and mode restoration are not guaranteed after an I/O failure.
 
-Before lease acquisition, startup checks write and search access to the public directory using effective credentials, and checks sticky-directory replacement restrictions. The kernel access check accounts for directory ACLs and read-only mounts without creating a public probe file. Permissions and mounts can change after the check; publication errors still use the failure handling below.
+Before its first write, startup checks write and search access to the public directory using effective credentials, and checks sticky-directory replacement restrictions. The kernel access check refuses unavailable access, including directory ACL restrictions and read-only mounts, without creating a public probe file. Startup repeats the check under the writer lock before lease acquisition. Permissions and mounts can change after the check; publication errors still use the failure handling below.
 
 Cleanup and publication hold the same exclusive writer lock and cannot overlap. Startup never
 scans the public directory for `.watch-*` cleanup. Public files with that prefix
