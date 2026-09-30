@@ -198,8 +198,7 @@ class WatchStore:
 
     def _clean_temporary_copies(self):
         for path in Path(self.path).parent.glob('.watch-*'):
-            if not (path.name.startswith(self._temporary_prefix())
-                    or re.fullmatch(r'\.watch-[a-z0-9_]{8}', path.name)):
+            if not path.name.startswith(self._temporary_prefix()):
                 continue
             try:
                 info = path.lstat()
