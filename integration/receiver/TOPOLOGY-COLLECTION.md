@@ -87,8 +87,9 @@ pathname again so it sees the latest published inode. A paused reader, overlappi
 readers, or a hostile process holding shared flock or POSIX locks on a published
 file cannot delay the collector through those locks. Readers can still exhaust
 storage by retaining descriptors to replaced inodes. Each pins a whole snapshot:
-the 10,000-item fixture with 600-byte padding occupies 7,438,336 bytes per initial
-publication, and later SQLite free-page growth can increase it. At three such
+an earlier local run of the 10,000-item fixture with 600-byte padding used
+7,438,336 bytes per initial publication. Size varies with database layout and
+SQLite free-page growth. At three such
 publications per 30-second cycle, pinned space grows by 22,315,008 bytes per cycle
 (743,833.6 bytes/s). Inspect open deleted files with `lsof +L1` and filter its NAME
 column for the published directory; monitor free space too. Readers must close
@@ -146,7 +147,8 @@ generation, even if the clock rolls back or the collector rewrites that lease.
 Reader observations do not close the collector's lease. The collector independently
 refuses expired generations; a new acquisition still requires a new relist.
 
-`close()` commits a closed lease and publishes it if the public path exists.
+`close()` commits a closed lease and publishes it if this object has not lost
+its lease and the public path exists.
 If this object already published closure, close releases resources without
 republishing. No later operation by this object withdraws that closed snapshot.
 Failure handling depends on the failed operation and lease ownership:
@@ -170,9 +172,9 @@ its copy or exit before that inode can be reclaimed. The pin is not inherited
 through exec. Readers never use this descriptor or the writer flock. Successful retirement is tracked separately from rejected
 input; exception class does not decide whether to withdraw.
 After successful unlink readers refuse as unavailable without recording death.
-A failed close raises and remains retryable; a retry completes once its private
-closure succeeds and closure is published or the public path is absent. If permissions
-or filesystem failure prevent both actions, the old snapshot can remain readable
+A failed close raises and remains retryable. Once the lease is lost, a retry
+releases local resources without attempting closure publication or withdrawal.
+If permissions or filesystem failure prevented withdrawal, the old snapshot can remain readable
 until its 45-second serving cutoff. A crash before rename leaves the previous
 complete snapshot and possibly a temp copy; after rename it leaves the new complete
 snapshot. A crash before failure cleanup has the same lease-age bound. Power-loss
