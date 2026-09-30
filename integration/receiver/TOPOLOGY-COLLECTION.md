@@ -63,12 +63,15 @@ That directory must be owned by the collector and mode 0700. The writer uses WAL
 and a collector-only lock inside that directory; readers cannot open either the
 lock or the private WAL/SHM files. The reader-facing `<database>` is a complete
 SQLite snapshot in DELETE journal format, published by atomic replacement after
-each committed change. It starts at mode 0400. To provision another reader UID,
-grant its group read access to that file; replacements retain the group and mode
-with all write bits removed. The private database saves this observed access
-grant before publication and restores it after withdrawal and restart. A grant
-changed after the last publication must be observed by another publication to
-be retained. Keep the parent directory writable only by the collector. Reader and
+each committed change. Access comes from `WatchStore` constructor configuration:
+`publication_mode=0o400` and `publication_gid=None` default to owner-only read
+access and the collector’s effective group. To grant another reader group access,
+pass `publication_mode=0o440, publication_gid=gid` on every restart. Write bits
+are always stripped. The collector does not learn access from the published file
+or consult an existing `publication_access` table; legacy tables are ignored.
+Revoke a configured grant by changing configuration and restarting the collector.
+A chmod is only a change to the current inode and does not update configuration.
+Keep the parent directory writable only by the collector. Reader and
 collector identities must be distinct for this permission boundary to hold.
 
 On Linux, readers open with `O_RDONLY|O_NOFOLLOW`, hold that descriptor, and use
@@ -111,8 +114,11 @@ the collector imports an existing database into its private directory, starts a
 new generation, and requires a relist. After backup it removes public `-wal`,
 `-shm` and `-journal` residue; publication also removes those names before rename.
 Startup under the collector lock removes only owned, regular, inactive temps
-with this store’s scoped prefix or the exact legacy pattern `.watch-[a-z0-9_]{8}`.
-Unrelated names and other stores’ scoped temps are preserved. Live copies hold
+with this store’s scoped prefix. It preserves unscoped legacy `.watch-*` files,
+including names matching `.watch-[a-z0-9_]{8}`: those names cannot distinguish
+an old temp from a foreign publication or operator file. For a one-time migration,
+stop collectors, identify leftover copies from the old installation, and remove
+only confirmed temporary files. Other stores’ scoped temps are preserved. Live copies hold
 a lock that cleanup never waits for. Copies remain 0600 through data fsync, then receive the
 published mode/group immediately before rename. POSIX ACLs are not preserved.
 New readers require the publication-protocol marker. Keep the private directory with its published snapshot during backup and
@@ -126,12 +132,22 @@ Reader observations do not close the collector's lease. The collector independen
 refuses expired generations; a new acquisition still requires a new relist.
 
 `close()` commits a closed lease and publishes it if the public path exists.
-Publication failures attempt to unlink the path. Private write failures during
-renewal, invalidation, retirement or close also attempt withdrawal, even if
-rollback or the fallback update fails. Ownership is sampled under the writer
-flock before those writes: an obsolete object cannot unlink a newer generation,
-and no newer collector can publish while withdrawal holds that flock. A failed
-acquisition before commit preserves the prior owner and snapshot.
+Failure handling depends on the failed operation and lease ownership:
+
+| Situation | Public outcome |
+|---|---|
+| Fallback retirement (`live=0`) commits and republishes successfully, including a late heartbeat or a COMMIT failure followed by successful fallback | Keep the closed snapshot so readers can record death. Do not withdraw. |
+| This object owns the lease and durable closure or publication cannot be established | Unlink before re-raising. |
+| This object never owned the lease because acquisition failed, including at COMMIT | Never touch the prior owner’s snapshot. |
+| The ownership query itself fails | Under the writer flock, compare the public inode with a retained descriptor for this object’s last publication. Unlink a match; preserve any other inode. |
+| Watch input is rejected, including non-object metadata in ADDED or BOOKMARK | Validate shapes explicitly, then publish `resync_required`. The same process can relist. |
+| `fail()` or invalidation encounters private integrity or I/O failure | Withdraw. |
+
+The retained descriptor pins one inode per open collector object, preventing inode
+number reuse during the ownership comparison. Replacement releases the previous
+pin, and successful close releases the last one. Readers never use this descriptor
+or the writer flock. Successful retirement is tracked separately from rejected
+input; exception class does not decide whether to withdraw.
 After successful unlink readers refuse as unavailable without recording death.
 A failed close raises and remains retryable; a retry completes once its private
 closure succeeds and closure is published or the public path is absent. If permissions

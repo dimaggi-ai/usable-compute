@@ -317,16 +317,32 @@ can still cause refusal until the next timely publication.
 The collector uses a private WAL database inside a collector-owned 0700 directory
 and publishes immutable DELETE-format snapshots on fresh inodes. Copies stay
 0600 through data fsync, then receive the read-only mode/group before rename.
-New snapshots start at 0400. The private database retains the last observed
-mode/group for restart after withdrawal; write bits are stripped. ACLs are not retained.
-Readers take no collector locks. Publication failure or a private write failure
-while the object owns the lease attempts withdrawal under the writer flock;
-readers then refuse as unavailable without tombstones.
-If publication and unlink both fail, the old snapshot may serve until age 45;
-close remains retryable. A crash can leave the last complete snapshot readable
-until its cutoff, plus a temp copy. Startup removes only owned, regular, inactive
-temps matching this store’s scoped prefix or the exact legacy pattern
-`.watch-[a-z0-9_]{8}`. Other files are preserved. Startup refuses a held legacy
+Access is explicit: `WatchStore(..., publication_mode=0o440, publication_gid=gid)`
+grants group read access; the default is 0400 with the collector’s effective group.
+Supply the configuration on every restart. Write bits are always stripped;
+on-disk permissions and any legacy `publication_access` table are ignored.
+To revoke a configured grant, change the configuration and restart the collector;
+chmod alone does not change configuration. ACLs are not retained.
+Readers take no collector locks. Failure handling follows this table:
+
+| Situation | Public outcome |
+|---|---|
+| Fallback retirement commits and republishes successfully, including a late heartbeat | Keep the closed snapshot so readers can record death. |
+| This object owns the lease, but durable closure or publication fails | Unlink before re-raising. |
+| Acquisition fails before ownership, including at COMMIT | Preserve the prior owner’s snapshot. |
+| The ownership query fails | Under the writer flock, unlink only if the public inode matches this object’s pinned last publication. Preserve another generation’s inode. |
+| Watch input is rejected, including malformed metadata | Publish `resync_required`; allow relist in the same process. |
+| Invalidation itself encounters private integrity or I/O failure | Withdraw. |
+
+After unlink, readers refuse as unavailable without adding tombstones.
+If unlink fails too, the error propagates and the old snapshot may serve until
+age 45; close remains retryable. A crash can leave the last complete snapshot
+readable until its cutoff, plus a temp copy. Startup removes only owned, regular,
+inactive temps with this store’s scoped prefix. Unscoped legacy `.watch-*`
+files are preserved: their names cannot prove ownership. For a one-time migration,
+stop collectors, identify leftover copies from the old installation, and remove
+only files confirmed to be temporary. Do not remove other stores’ publications
+or operator files. Startup refuses a held legacy
 lease lock; otherwise it removes that lock and stale journals after migration
 backup. Read-only modes block ordinary legacy writes, but root or an owner
 changing permissions can bypass them. Stop old collectors and upgrade together.
