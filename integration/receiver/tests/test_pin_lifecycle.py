@@ -27,10 +27,16 @@ def test_publication_pin_is_readonly(published):
 def test_publication_pin_released(published, operation):
     store, path, _ = published
     fd = store._published_fd
+    prior = os.fstat(fd)
     if operation == 'withdraw': store._withdraw(True)
     elif operation == 'replace': store.heartbeat()
     else: store.close()
-    with pytest.raises(OSError): os.fstat(fd)
+    try:
+        current = os.fstat(fd)
+    except OSError:
+        return
+    assert operation == 'replace'
+    assert (current.st_dev, current.st_ino) != (prior.st_dev, prior.st_ino)
 
 
 @pytest.mark.parametrize('obsolete', [False, True])
