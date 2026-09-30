@@ -19,6 +19,7 @@ import uuid
 import hmac
 import secrets
 import tempfile
+import warnings
 from pathlib import Path
 from urllib.parse import quote
 from .topology import need, bounded, MAX_RECORDS, capped_expiry, current
@@ -212,19 +213,37 @@ class WatchStore:
                 continue
             try:
                 info = path.lstat()
-                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                        or info.st_nlink != 1):
                     continue
-                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                # The writer lock excludes active publications. Restore owner
+                # read only in this private directory to inspect a crash copy's
+                # advisory lock, including copies narrowed to mode 0000.
+                mode = stat.S_IMODE(info.st_mode)
+                changed = not mode & stat.S_IRUSR
+                fd = None
                 try:
-                    # Clean crash residue without waiting for an active copy.
+                    if changed:
+                        path.chmod(mode | stat.S_IRUSR, follow_symlinks=False)
+                    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     current = os.fstat(fd)
                     if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
                         path.unlink(missing_ok=True)
                 finally:
-                    os.close(fd)
+                    if fd is not None:
+                        try:
+                            if changed:
+                                os.fchmod(fd, mode)
+                        finally:
+                            os.close(fd)
+                    elif changed and path.exists():
+                        path.chmod(mode, follow_symlinks=False)
             except (FileNotFoundError, BlockingIOError):
                 continue
+            except OSError as error:
+                warnings.warn(f'temporary cleanup failed for {path.name}: {error}',
+                              RuntimeWarning)
 
     def _publish(self):
         if self._retired_published:
