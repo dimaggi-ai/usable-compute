@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from dimaggi_receiver import topology_watch as w
+from dimaggi_receiver.observations import ObservationError
 from test_publication_evidence import published, read
 
 
@@ -15,7 +16,9 @@ def test_failed_publication_withdraws_current(published, monkeypatch, operation,
     with monkeypatch.context() as patch:
         patch.setattr(w.os, 'replace', fail)
         if operation == 'retire': store.last_tick -= 46
-        with pytest.raises(OSError):
+        expected = ObservationError if error == errno.EXDEV else OSError
+        message = 'same filesystem and mount' if error == errno.EXDEV else 'injected replacement failure'
+        with pytest.raises(expected, match=message):
             if operation == 'projection': store._transaction(lambda value: value)
             elif operation == 'retire': store.heartbeat()
             else: getattr(store, operation)()
