@@ -186,7 +186,11 @@ withdraws only the collector's pinned publication; a successor's inode and a
 published retirement are preserved. If the lock itself cannot be acquired, the
 collector marks its lease lost and releases its publication pin. It cannot
 safely unlink without serialization, so the existing 45-second serving cutoff
-applies. Close can be retried after access is restored.
+applies. Once the lease is lost, close releases the local connection and retained
+descriptors without checking placement or changing the publication. If close
+itself encounters the placement failure, it reports that failure; a second close
+releases local resources even if access has not been restored. A successful
+retirement remains published.
 
 Readers serve a live snapshot only if the held inode's kernel ctime minus its
 checked heartbeat H is between `-CLOCK_TOLERANCE_SECONDS = -2` and

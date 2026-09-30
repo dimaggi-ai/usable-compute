@@ -482,7 +482,7 @@ class WatchStore:
 
     def close(self):
         if self.closed: return
-        if self._retired_published:
+        if self.lost or self._retired_published:
             self.closed = True
             self.db.close()
             self._release_publication()
