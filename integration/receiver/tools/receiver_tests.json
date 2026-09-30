@@ -804,6 +804,8 @@
   "tests/test_publication_failure.py::test_private_write_failure_withdraws_snapshot[update-fail]",
   "tests/test_publication_failure.py::test_private_write_failure_withdraws_snapshot[update-heartbeat]",
   "tests/test_publication_failure.py::test_private_write_failure_withdraws_snapshot[update-retire]",
+  "tests/test_publication_group.py::test_publication_group_requires_membership[100]",
+  "tests/test_publication_group.py::test_publication_group_requires_membership[101]",
   "tests/test_quantities.py::test_bits_bytes_and_binary_decimal_are_distinct",
   "tests/test_quantities.py::test_callers_decimal_context_cannot_change_units",
   "tests/test_quantities.py::test_long_fraction_cannot_round_into_an_integer",

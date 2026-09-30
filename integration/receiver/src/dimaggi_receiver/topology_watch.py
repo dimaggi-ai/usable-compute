@@ -63,6 +63,8 @@ class WatchStore:
         need(type(publication_mode) is int and 0 <= publication_mode <= 0o777, 'invalid publication mode')
         need(publication_gid is None or type(publication_gid) is int and publication_gid >= 0,
              'invalid publication group')
+        need(publication_gid is None or publication_gid in {os.getegid(), *os.getgroups()},
+             'publication group requires collector membership')
         self.publication_access = (publication_mode & 0o555, os.getegid() if publication_gid is None else publication_gid)
         need(collection in KINDS, 'unsupported collection')
         self.scope = [ _identifier(tenant, 'tenant'), _identifier(cluster, 'cluster'), collection, namespace ]
