@@ -67,3 +67,26 @@ def test_acquisition_checks_rename_ctime(tmp_path, monkeypatch, advances):
             w.WatchStore(path, 't', 'c', 'nodes')
         assert not path.exists()
     assert not list(tmp_path.glob('.watch-*'))
+
+
+def test_chmod_during_sql_keeps_pre_read_witness(published, monkeypatch):
+    import sqlite3
+    import time
+    _, path, _ = published
+    original = sqlite3.connect
+    class MetadataChange:
+        def __init__(self, db): self.db = db
+        def __getattr__(self, name): return getattr(self.db, name)
+        def execute(self, sql, *args):
+            result = self.db.execute(sql, *args)
+            if sql == 'COMMIT':
+                time.sleep(0.08)
+                path.chmod(0o440)
+            return result
+    def connect(*args, **kwargs):
+        db = original(*args, **kwargs)
+        return MetadataChange(db) if kwargs.get("uri") else db
+    monkeypatch.setattr(sqlite3, 'connect', connect)
+    _, _, _, lease, _, stamp = w._read_rows(path)
+    assert stamp-lease[1] < 0.05
+    assert path.stat().st_ctime-lease[1] > 0.05
