@@ -8,6 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from contextlib import closing, contextmanager
 import json
+import errno
 import fcntl
 import os
 import stat
@@ -178,7 +179,34 @@ class WatchStore:
             if fd is not None:
                 os.close(fd)
 
+    @staticmethod
+    def _rename(source, target):
+        try:
+            os.replace(source, target)
+        except OSError as error:
+            need(error.errno != errno.EXDEV,
+                 'collector directory and publication require the same filesystem and mount')
+            raise
+
+    @staticmethod
+    def _mount_identity(path):
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            device = os.fstat(fd).st_dev
+            if sys.platform != 'linux':
+                return device
+            # st_dev cannot distinguish bind mounts. The descriptor identifies
+            # the mount actually traversed, without parsing escaped pathnames.
+            fields = dict(line.split(':', 1) for line in
+                          Path(f'/proc/self/fdinfo/{fd}').read_text().splitlines())
+            return device, int(fields['mnt_id'])
+        finally:
+            os.close(fd)
+
     def _check_rename_ctime(self):
+        need(self._mount_identity(Path(self.writer_path).parent) ==
+             self._mount_identity(Path(self.path).parent),
+             'collector directory and publication require the same filesystem and mount')
         fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
         target = None
         try:
@@ -188,7 +216,7 @@ class WatchStore:
             initial = os.stat(source).st_ctime_ns
             deadline = time.perf_counter() + CLOCK_TOLERANCE_SECONDS
             while True:
-                os.replace(source, target)
+                self._rename(source, target)
                 if os.stat(target).st_ctime_ns > initial:
                     return
                 need(time.perf_counter() < deadline, 'rename must advance publication ctime')
@@ -278,7 +306,7 @@ class WatchStore:
             os.fchown(fd, -1, access[1])
             os.fchmod(fd, access[0] & 0o555)
             self._remove_public_journals()
-            os.replace(temporary, target)
+            self._rename(temporary, target)
             self._release_publication()
             fcntl.flock(fd, fcntl.LOCK_UN)
             self._publication_pin = pin
