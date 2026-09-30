@@ -249,27 +249,40 @@ class WatchStore:
                 # advisory lock, including copies narrowed to mode 0000.
                 mode = stat.S_IMODE(info.st_mode)
                 changed = not mode & stat.S_IRUSR
-                fd = None
+                fd = anchor = None
+                restored = False
                 try:
+                    if changed and hasattr(os, 'O_PATH'):
+                        anchor = os.open(path, os.O_PATH | os.O_NOFOLLOW)
+                        current = os.fstat(anchor)
+                        if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino):
+                            continue
+                    def set_mode(value):
+                        if anchor is not None:
+                            os.chmod(f'/proc/self/fd/{anchor}', value)
+                        else:
+                            path.chmod(value, follow_symlinks=False)
                     if changed:
-                        path.chmod(mode | stat.S_IRUSR, follow_symlinks=False)
+                        set_mode(mode | stat.S_IRUSR)
+                        restored = True
                     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     current = os.fstat(fd)
-                    if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
-                        path.unlink(missing_ok=True)
+                    if (info.st_dev, info.st_ino) != (current.st_dev, current.st_ino):
+                        continue
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    path.unlink(missing_ok=True)
                 finally:
-                    if fd is not None:
-                        try:
-                            if changed:
-                                os.fchmod(fd, mode)
-                        finally:
+                    try:
+                        if restored:
+                            set_mode(mode)
+                    finally:
+                        if fd is not None:
                             os.close(fd)
-                    elif changed and path.exists():
-                        path.chmod(mode, follow_symlinks=False)
+                        if anchor is not None:
+                            os.close(anchor)
             except (FileNotFoundError, BlockingIOError):
                 continue
-            except OSError as error:
+            except Exception as error:
                 warnings.warn(f'temporary cleanup failed for {path.name}: {error}',
                               RuntimeWarning)
 
