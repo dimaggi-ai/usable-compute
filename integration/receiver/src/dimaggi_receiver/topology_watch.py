@@ -182,7 +182,7 @@ class WatchStore:
         fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
         target = None
         try:
-            target_fd, target = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
+            target_fd, target = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
             os.close(target_fd)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             initial = os.stat(source).st_ctime_ns
