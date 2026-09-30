@@ -43,16 +43,26 @@ def test_real_publication_cross_mount_refuses_and_withdraws(published, monkeypat
 
 
 @pytest.mark.parametrize('kind', ['tmpfs', 'bind'])
-def test_real_mount_placement_refuses_before_acquisition(tmp_path, kind):
+def test_real_mount_placement_refuses_before_acquisition(tmp_path, kind, record_property):
     import shutil
     import subprocess
     import sys
-    if sys.platform != 'linux' or not shutil.which('unshare'):
-        pytest.skip('mount namespace support unavailable')
-    capability = subprocess.run(['unshare', '--map-auto', '--map-root-user', '--mount', 'true'],
-                                capture_output=True, timeout=10)
-    if capability.returncode:
-        pytest.skip('mount namespace permission unavailable')
+    available = sys.platform == 'linux' and shutil.which('unshare')
+    if available:
+        capability = subprocess.run(['unshare', '--map-auto', '--map-root-user', '--mount', 'true'],
+                                    capture_output=True, timeout=10)
+        available = capability.returncode == 0
+    if not available:
+        from unittest.mock import patch
+        record_property('mount_validation', 'injected EXDEV; mount namespace unavailable')
+        with patch.object(os, 'replace', side_effect=OSError(errno.EXDEV, 'cross-device link')):
+            with pytest.raises(ObservationError, match='same filesystem and mount'):
+                w.WatchStore(tmp_path / 'db', 't', 'c', 'nodes')
+        assert not (tmp_path / 'db').exists()
+        assert not (tmp_path / 'db.collector' / 'writer.db').exists()
+        assert not list(tmp_path.rglob('.watch-*'))
+        return
+    record_property('mount_validation', 'real namespace ' + kind)
     child = '''
 import os, subprocess, sys
 from pathlib import Path
