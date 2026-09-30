@@ -113,12 +113,13 @@ cannot distinguish in-place writes reliably, so readers do not use that test. On
 the collector imports an existing database into its private directory, starts a
 new generation, and requires a relist. After backup it removes public `-wal`,
 `-shm` and `-journal` residue; publication also removes those names before rename.
-Startup under the collector lock removes only owned, regular, inactive temps
-with this store’s scoped prefix. It preserves unscoped legacy `.watch-*` files,
-including names matching `.watch-[a-z0-9_]{8}`: those names cannot distinguish
-an old temp from a foreign publication or operator file. For a one-time migration,
+Temporary copies are created inside the collector-owned 0700
+`<database>.collector/` directory. Startup under the collector lock cleans regular,
+inactive copies only there. It never scans the public directory for `.watch-*`
+cleanup, including scoped names: a name cannot prove temp provenance. For a one-time migration,
 stop collectors, identify leftover copies from the old installation, and remove
-only confirmed temporary files. Other stores’ scoped temps are preserved. Live copies hold
+only confirmed temporary files. Rename stays on the same filesystem; publication
+syncs both the public and private directories. Live copies hold
 a lock that cleanup never waits for. Copies remain 0600 through data fsync, then receive the
 published mode/group immediately before rename. POSIX ACLs are not preserved.
 New readers require the publication-protocol marker. Keep the private directory with its published snapshot during backup and
@@ -132,21 +133,25 @@ Reader observations do not close the collector's lease. The collector independen
 refuses expired generations; a new acquisition still requires a new relist.
 
 `close()` commits a closed lease and publishes it if the public path exists.
+If this object already published closure, close releases resources without
+republishing. No later operation by this object withdraws that closed snapshot.
 Failure handling depends on the failed operation and lease ownership:
 
 | Situation | Public outcome |
 |---|---|
-| Fallback retirement (`live=0`) commits and republishes successfully, including a late heartbeat or a COMMIT failure followed by successful fallback | Keep the closed snapshot so readers can record death. Do not withdraw. |
-| This object owns the lease and durable closure or publication cannot be established | Unlink before re-raising. |
+| Fallback retirement (`live=0`) commits and republishes successfully, including a late heartbeat or a COMMIT failure followed by successful fallback | Keep the closed snapshot so readers can record death. Later operations by this object preserve it; close does not republish. Do not withdraw. |
+| This object owns the lease, has not published closure, and durable closure or publication cannot be established | Unlink before re-raising. |
 | This object never owned the lease because acquisition failed, including at COMMIT | Never touch the prior owner’s snapshot. |
-| The ownership query itself fails | Under the writer flock, compare the public inode with a retained descriptor for this object’s last publication. Unlink a match; preserve any other inode. |
+| The ownership query itself fails | Under the writer flock, compare the public inode with a retained descriptor for this object’s last publication. Unlink a match only before successful closure publication; preserve any other inode. |
 | Watch input is rejected, including non-object metadata in ADDED or BOOKMARK | Validate shapes explicitly, then publish `resync_required`. The same process can relist. |
-| `fail()` or invalidation encounters private integrity or I/O failure | Withdraw. |
+| `fail()` or invalidation encounters private integrity or I/O failure | Withdraw unless this object already published closure. |
 
-The retained descriptor pins one inode per open collector object, preventing inode
-number reuse during the ownership comparison. Replacement releases the previous
-pin, and successful close releases the last one. Readers never use this descriptor
-or the writer flock. Successful retirement is tracked separately from rejected
+The read-only ownership descriptor pins at most one inode per collector
+object that has not yet been garbage-collected, preventing inode reuse during ownership checks. Replacement, withdrawal
+and successful close release the pin. Garbage collection closes it without
+publishing, retiring or unlinking. Fork inherits the pin: the child must release
+its copy or exit before that inode can be reclaimed. The pin is not inherited
+through exec. Readers never use this descriptor or the writer flock. Successful retirement is tracked separately from rejected
 input; exception class does not decide whether to withdraw.
 After successful unlink readers refuse as unavailable without recording death.
 A failed close raises and remains retryable; a retry completes once its private

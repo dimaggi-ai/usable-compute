@@ -319,7 +319,9 @@ and publishes immutable DELETE-format snapshots on fresh inodes. Copies stay
 0600 through data fsync, then receive the read-only mode/group before rename.
 Access is explicit: `WatchStore(..., publication_mode=0o440, publication_gid=gid)`
 grants group read access; the default is 0400 with the collector’s effective group.
-Supply the configuration on every restart. Write bits are always stripped;
+Supply the configuration on every restart. An explicit group must be the
+collector’s effective group or one of its supplementary groups; construction
+refuses other groups before creating files. Write bits are always stripped;
 on-disk permissions and any legacy `publication_access` table are ignored.
 To revoke a configured grant, change the configuration and restart the collector;
 chmod alone does not change configuration. ACLs are not retained.
@@ -327,25 +329,34 @@ Readers take no collector locks. Failure handling follows this table:
 
 | Situation | Public outcome |
 |---|---|
-| Fallback retirement commits and republishes successfully, including a late heartbeat | Keep the closed snapshot so readers can record death. |
-| This object owns the lease, but durable closure or publication fails | Unlink before re-raising. |
+| Fallback retirement commits and republishes successfully, including a late heartbeat | Keep the closed snapshot so readers can record death. Later operations by this object preserve it; close does not republish. |
+| This object owns the lease, has not published closure, and durable closure or publication fails | Unlink before re-raising. |
 | Acquisition fails before ownership, including at COMMIT | Preserve the prior owner’s snapshot. |
-| The ownership query fails | Under the writer flock, unlink only if the public inode matches this object’s pinned last publication. Preserve another generation’s inode. |
+| The ownership query fails | Under the writer flock, before successful closure publication, unlink only if the public inode matches this object’s pinned last publication. Preserve another generation’s inode. |
 | Watch input is rejected, including malformed metadata | Publish `resync_required`; allow relist in the same process. |
-| Invalidation itself encounters private integrity or I/O failure | Withdraw. |
+| Invalidation itself encounters private integrity or I/O failure | Withdraw unless this object already published closure. |
 
 After unlink, readers refuse as unavailable without adding tombstones.
 If unlink fails too, the error propagates and the old snapshot may serve until
-age 45; close remains retryable. A crash can leave the last complete snapshot
-readable until its cutoff, plus a temp copy. Startup removes only owned, regular,
-inactive temps with this store’s scoped prefix. Unscoped legacy `.watch-*`
-files are preserved: their names cannot prove ownership. For a one-time migration,
+age 45 seconds; close remains retryable. A crash can leave the last complete snapshot
+readable until its cutoff, plus a temp copy. Temporary copies are created inside
+the collector-owned 0700 `<database>.collector/` directory. Under the collector
+lock, startup cleans regular, inactive copies only there; it never
+scans the public directory for `.watch-*` cleanup. Public files with that prefix
+are preserved, including scoped names: a name cannot prove temp provenance. For a one-time migration,
 stop collectors, identify leftover copies from the old installation, and remove
 only files confirmed to be temporary. Do not remove other stores’ publications
 or operator files. Startup refuses a held legacy
 lease lock; otherwise it removes that lock and stale journals after migration
 backup. Read-only modes block ordinary legacy writes, but root or an owner
 changing permissions can bypass them. Stop old collectors and upgrade together.
+
+The read-only ownership descriptor pins at most one inode per collector
+object that has not yet been garbage-collected, preventing inode reuse during ownership checks. Replacement, withdrawal
+and successful close release the pin. Garbage collection closes it without
+publishing, retiring or unlinking. Fork inherits the pin: the child must release
+its copy or exit before that inode can be reclaimed. The pin is not inherited
+through exec. Readers never use this descriptor or the writer flock.
 
 Heartbeat-only changes can pass the second read if projection, identity and
 generation are unchanged and all newer lease/ledger checks pass. Frequent
