@@ -119,7 +119,10 @@ startup cleans matching, collector-owned regular copies only there. Modes from
 0000 through 0777 are accepted, with write bits stripped. Cleanup temporarily
 restores owner read to inspect a copy's lock, so crash residue with mode 0000
 can also be removed. Locked copies retain their modes; symlinks, hardlinks and other
-nonregular entries are preserved. Cleanup and publication hold the same exclusive writer lock and cannot overlap. Cleanup I/O errors warn without blocking startup. Modes
+nonregular entries are preserved. Cleanup and publication hold the same exclusive writer lock and cannot overlap. Per-entry cleanup exceptions warn and leave startup running; process cancellation still propagates. Linux cleanup uses a verified no-follow descriptor to change only the crash copy's mode, even when no-follow path chmod is unsupported. If cleanup or mode restoration fails, the warning requires operator attention; deletion and mode restoration are not guaranteed after an I/O failure.
+
+Before lease acquisition, startup checks write and search access to the public directory using effective credentials, and checks sticky-directory replacement restrictions. The kernel access check accounts for directory ACLs and read-only mounts without creating a public probe file. Permissions and mounts can change after the check; publication errors still use the failure handling below.
+ Modes
 without owner read can prevent the collector identity from reading the public
 snapshot; they do not block private crash-copy cleanup.
 Startup never scans the public directory for `.watch-*`
@@ -149,6 +152,8 @@ Failure handling depends on the failed operation and lease ownership:
 
 | Situation | Public outcome |
 |---|---|
+| Startup lacks effective write/search access or sticky-directory replacement permission | Refuse before acquisition; preserve the running lease and public inode. |
+| Writer lock cannot be acquired | Mark lost, release the publication pin and refuse explicitly. Preserve the public inode without unsynchronized unlink; its existing serving cutoff applies. |
 | Fallback retirement (`live=0`) commits and republishes successfully, including a late heartbeat or a COMMIT failure followed by successful fallback | Keep the closed snapshot so readers can record death. Later operations by this object preserve it; close does not republish. Do not withdraw. |
 | This object owns the lease, has not published closure, and durable closure or publication cannot be established | Unlink before re-raising. |
 | This object never owned the lease because acquisition failed, including at COMMIT | Never touch the prior owner’s snapshot. |
@@ -172,6 +177,16 @@ complete snapshot and possibly a temp copy; after rename it leaves the new compl
 snapshot. A crash before failure cleanup has the same lease-age bound. Power-loss
 durability before directory fsync is unqualified. Reads already in progress may
 finish from an earlier snapshot; withdrawal does not revoke returned receipts.
+
+Each file-backed collector retains one read-only writer-lock descriptor until successful close or
+object reclamation. Before a write, it takes that lock and verifies the lock
+pathname and mount placement. A hidden private directory or missing procfs then
+raises an explicit placement error. Under the retained lock, failure cleanup
+withdraws only the collector's pinned publication; a successor's inode and a
+published retirement are preserved. If the lock itself cannot be acquired, the
+collector marks its lease lost and releases its publication pin. It cannot
+safely unlink without serialization, so the existing 45-second serving cutoff
+applies. Close can be retried after access is restored.
 
 Readers serve a live snapshot only if the held inode's kernel ctime minus its
 checked heartbeat H is between `-CLOCK_TOLERANCE_SECONDS = -2` and
