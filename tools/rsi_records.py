@@ -23,6 +23,9 @@ import re
 from pathlib import Path
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "integration" / "receiver" / "src"))
+from dimaggi_receiver.observations import _utc
+
 MAX_BYTES = 262144
 REPOSITORIES = {"scheduler-vs-more-gpus", "span-contract"}
 BINDING = {"repo", "snapshot", "profile", "objective", "denominator", "unit", "workload"}
@@ -85,11 +88,9 @@ def instant(value, label):
     text(value, label)
     require(value.endswith("Z"), label + ": UTC Z timestamp required")
     try:
-        result = datetime.fromisoformat(value[:-1] + "+00:00")
+        return _utc(value)
     except ValueError as error:
         raise ValueError(label + ": invalid timestamp") from error
-    require(result.tzinfo is not None and result.utcoffset() == timedelta(0), label + ": UTC required")
-    return result
 
 
 def amount(value, label, missing):

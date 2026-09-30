@@ -46,6 +46,48 @@ def fixture():
 
 
 class RecordTests(unittest.TestCase):
+    def test_instant_rejects_noncanonical_timestamps(self):
+        for value in (
+            "2026-12-31T24:00:00Z", "2024-02-29T24:00:00.000001Z",
+            "2026-01-01T00:00:00.1234567Z", "20260101T000000Z",
+            "2026-01-01T00:00Z", "2026-W01-1T00:00:00Z",
+            "2026-01-01 00:00:00Z", "2026-01-01T00:00:00,1Z",
+            "2026-01-01T00:00:00Z\n", "2026-01-01T00:00:00+00:00",
+            "2025-02-29T00:00:00Z", "2026-01-01T23:59:60Z", None, 2026,
+        ):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "boundary:"):
+                    rsi.instant(value, "boundary")
+
+    def test_instant_preserves_calendar_and_fraction(self):
+        for value, expected in (
+            ("0001-01-01T00:00:00Z", datetime(1, 1, 1, tzinfo=timezone.utc)),
+            ("2000-02-29T00:00:00Z", datetime(2000, 2, 29, tzinfo=timezone.utc)),
+            ("9999-12-31T23:59:59.999999Z",
+             datetime(9999, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(rsi.instant(value, "boundary"), expected)
+        for digits in ("1", "12", "123", "1234", "12345", "123456"):
+            with self.subTest(digits=digits):
+                self.assertEqual(rsi.instant("2026-01-01T00:00:00." + digits + "Z", "boundary"),
+                                 datetime(2026, 1, 1, microsecond=int(digits.ljust(6, "0")),
+                                          tzinfo=timezone.utc))
+
+    def test_record_chronology_rejects_noncanonical_timestamps(self):
+        paths = (("baseline_frozen_at",), ("tasks", 0, "snapshot_created_at"),
+                 ("weeks", 0, "start"), ("weeks", 0, "end"),
+                 ("weeks", 0, "recorded_at"), ("dispositions", 0, "accepted_at"))
+        for path in paths:
+            record = fixture()
+            target = record
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = target[path[-1]].replace("Z", ".0000001Z")
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "invalid timestamp"):
+                    rsi._assess_records(record, NOW)
+
     def test_synthetic_records_never_authorize_continuation(self):
         result = rsi._assess_records(fixture(), NOW)
         self.assertEqual(result["assessment"], "synthetic_only")
