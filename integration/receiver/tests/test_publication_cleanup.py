@@ -56,7 +56,7 @@ def test_copy_stays_private_until_data_fsync(published, monkeypatch):
     monkeypatch.setattr(os, 'fsync', sync)
     store.heartbeat()
     assert modes == [0o600]
-    assert stat.S_IMODE(path.stat().st_mode) == 0o440
+    assert stat.S_IMODE(path.stat().st_mode) == 0o400
 
 
 def test_publication_removes_reintroduced_journal_residue(published):

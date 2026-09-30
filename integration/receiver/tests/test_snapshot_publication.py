@@ -35,7 +35,9 @@ def test_legacy_database_import_requires_new_generation_and_relist(state):
 
 def test_publication_retains_group_and_mode_on_a_new_inode(state):
     store, path, ledger, start = state
-    path.chmod(0o640)
+    store.close()
+    store = w.WatchStore(path, 't', 'c', 'nodes', publication_mode=0o640, publication_gid=path.stat().st_gid)
+    store.relist(listing(), T, E)
     before = path.stat()
     store.heartbeat()
     after = path.stat()
@@ -46,3 +48,5 @@ def test_publication_retains_group_and_mode_on_a_new_inode(state):
     with sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True) as snapshot:
         assert snapshot.execute('PRAGMA journal_mode').fetchone() == ('delete',)
     assert not read(path, ledger)['issues']
+
+    store.close()

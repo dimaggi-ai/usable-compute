@@ -58,7 +58,12 @@ def _lease_lock(path, *, writer=False):
 
 
 class WatchStore:
-    def __init__(self, path, tenant, cluster, collection, namespace=''):
+    def __init__(self, path, tenant, cluster, collection, namespace='', *,
+                 publication_mode=0o400, publication_gid=None):
+        need(type(publication_mode) is int and 0 <= publication_mode <= 0o777, 'invalid publication mode')
+        need(publication_gid is None or type(publication_gid) is int and publication_gid >= 0,
+             'invalid publication group')
+        self.publication_access = (publication_mode & 0o555, os.getegid() if publication_gid is None else publication_gid)
         need(collection in KINDS, 'unsupported collection')
         self.scope = [ _identifier(tenant, 'tenant'), _identifier(cluster, 'cluster'), collection, namespace ]
         need((collection == 'resourceclaims') == bool(namespace), 'claims require explicit namespace')
@@ -105,7 +110,6 @@ class WatchStore:
                 self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
             self.db.execute('CREATE TABLE IF NOT EXISTS store_identity (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL)')
             self.db.execute('INSERT OR IGNORE INTO store_identity VALUES(1,?)', (str(uuid.uuid4()),))
-            self.db.execute('CREATE TABLE IF NOT EXISTS publication_access (id INTEGER PRIMARY KEY CHECK(id=1), mode INTEGER NOT NULL, gid INTEGER NOT NULL)')
             self.db.execute('CREATE TABLE IF NOT EXISTS publication_protocol (version INTEGER NOT NULL)')
             self.db.execute('DELETE FROM publication_protocol')
             self.db.execute('INSERT INTO publication_protocol VALUES(1)')
@@ -233,14 +237,7 @@ class WatchStore:
         # Build on a new inode. Reader locks on any published inode can never
         # conflict with backup, checkpoint, fsync or replacement of this file.
         target = Path(self.path)
-        info = target.stat() if target.exists() else None
-        if info is not None:
-            access = (stat.S_IMODE(info.st_mode) & 0o555, info.st_gid)
-            self.db.execute('INSERT OR REPLACE INTO publication_access VALUES(1,?,?)', access)
-        else:
-            access = self.db.execute('SELECT mode,gid FROM publication_access WHERE id=1').fetchone()
-            if access is None:
-                access = (0o400, os.getegid())
+        access = self.publication_access
         fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=target.parent)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -251,8 +248,6 @@ class WatchStore:
             os.fsync(fd)
             os.fchown(fd, -1, access[1])
             os.fchmod(fd, access[0] & 0o555)
-            # Retain the last published access grant in the private database,
-            # including when withdrawal removed the public inode.
             self._remove_public_journals()
             os.replace(temporary, target)
             self._release_publication()
