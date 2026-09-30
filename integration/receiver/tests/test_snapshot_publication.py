@@ -37,7 +37,9 @@ def test_publication_retains_group_and_mode_on_a_new_inode(state):
     store, path, ledger, start = state
     store.close()
     store = w.WatchStore(path, 't', 'c', 'nodes', publication_mode=0o640, publication_gid=path.stat().st_gid)
-    store.relist(listing(), T, E)
+    payload = listing()
+    payload['metadata']['resourceVersion'] = '12'
+    store.relist(payload, T, E)
     before = path.stat()
     store.heartbeat()
     after = path.stat()
