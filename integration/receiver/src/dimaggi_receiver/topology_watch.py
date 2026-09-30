@@ -222,6 +222,8 @@ class WatchStore:
                 continue
 
     def _publish(self):
+        if self._retired_published:
+            return
         try:
             self._publish_snapshot()
         except BaseException:
@@ -268,6 +270,8 @@ class WatchStore:
             self._published_fd = None
 
     def _withdraw(self, owns):
+        if self._retired_published:
+            return
         if self.path is None:
             return
         if owns is None:
@@ -352,13 +356,18 @@ class WatchStore:
 
     def close(self):
         if self.closed: return
+        if self._retired_published:
+            self.closed = True
+            self.db.close()
+            self._release_publication()
+            return
         with self._write_guard():
             self.db.execute('BEGIN IMMEDIATE')
             changed = self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=? AND generation=?',
                                       (self.owner_id, self.generation)).rowcount
             self.db.execute('COMMIT')
             if changed and (self.path is None or Path(self.path).exists()):
-                self._publish()
+                self._publish_retirement()
         self.closed = True
         self.db.close()
         self._release_publication()
