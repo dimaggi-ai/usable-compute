@@ -62,3 +62,21 @@ def test_private_temp_rename_stamps_and_syncs_both_directories(published, monkey
     assert not read(path, ledger)['issues']
 
 
+
+
+def test_startup_probe_allocation_failure_releases_source(tmp_path, monkeypatch):
+    gc.collect()
+    descriptors = '/proc/self/fd' if Path('/proc/self/fd').exists() else '/dev/fd'
+    baseline = len(os.listdir(descriptors))
+    original = w.tempfile.mkstemp
+    calls = 0
+    def allocate(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2: raise OSError('probe allocation failed')
+        return original(*args, **kwargs)
+    monkeypatch.setattr(w.tempfile, 'mkstemp', allocate)
+    with pytest.raises(OSError, match='probe allocation failed'):
+        w.WatchStore(tmp_path/'db', 't', 'c', 'nodes')
+    assert len(os.listdir(descriptors)) == baseline
+    assert not list(tmp_path.rglob('.watch-*'))

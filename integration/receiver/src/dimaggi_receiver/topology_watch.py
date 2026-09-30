@@ -179,9 +179,10 @@ class WatchStore:
 
     def _check_rename_ctime(self):
         fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
-        target_fd, target = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
-        os.close(target_fd)
+        target = None
         try:
+            target_fd, target = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
+            os.close(target_fd)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             initial = os.stat(source).st_ctime_ns
             deadline = time.perf_counter() + CLOCK_TOLERANCE_SECONDS
@@ -195,7 +196,8 @@ class WatchStore:
         finally:
             os.close(fd)
             Path(source).unlink(missing_ok=True)
-            Path(target).unlink(missing_ok=True)
+            if target is not None:
+                Path(target).unlink(missing_ok=True)
 
     def _remove_public_journals(self):
         for suffix in ('-wal', '-shm', '-journal'):
