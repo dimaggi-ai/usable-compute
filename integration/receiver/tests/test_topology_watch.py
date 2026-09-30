@@ -107,7 +107,7 @@ s.execute("UPDATE projection SET body='uncommitted-corruption'")
 Path(sys.argv[2]).write_text('ready')
 time.sleep(60)
 '''
-    proc=subprocess.Popen([sys.executable,'-c',code,str(path),str(marker)])
+    proc=subprocess.Popen([sys.executable,'-c',code,str(s.writer_path),str(marker)])
     try:
         deadline=time.monotonic()+5
         while not marker.exists() and time.monotonic()<deadline:time.sleep(.01)

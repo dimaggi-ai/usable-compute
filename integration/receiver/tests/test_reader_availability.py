@@ -105,7 +105,7 @@ def test_readonly_snapshot_under_restrictive_umask(tmp_path, monkeypatch, umask)
     w.initialize_expiry_ledger(ledger)
     path = tmp_path/'watch.db'
     try:
-        assert path.stat().st_mode & 0o777 == 0o600
+        assert path.stat().st_mode & 0o777 == 0o400
         assert not path.with_name(path.name+'.lease-lock').exists()
         assert not path.with_name(path.name+'-wal').exists()
         assert not path.with_name(path.name+'-shm').exists()

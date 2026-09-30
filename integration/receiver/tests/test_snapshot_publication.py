@@ -14,6 +14,7 @@ def test_legacy_database_import_requires_new_generation_and_relist(state):
     generation = store.generation
     store.close()
     shutil.rmtree(Path(store.writer_path).parent)
+    path.chmod(0o600)
     with sqlite3.connect(path) as legacy:
         legacy.execute('DROP TABLE publication_protocol')
     before = ledger.read_bytes()
@@ -39,7 +40,7 @@ def test_publication_retains_group_and_mode_on_a_new_inode(state):
     store.heartbeat()
     after = path.stat()
     assert before.st_ino != after.st_ino
-    assert (after.st_gid, after.st_mode & 0o777) == (before.st_gid, 0o640)
+    assert (after.st_gid, after.st_mode & 0o777) == (before.st_gid, 0o440)
     assert Path(store.writer_path).parent.stat().st_mode & 0o777 == 0o700
     assert store.db.execute('PRAGMA journal_mode').fetchone() == ('wal',)
     with sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True) as snapshot:

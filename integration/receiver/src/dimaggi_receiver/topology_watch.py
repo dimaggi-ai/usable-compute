@@ -80,7 +80,7 @@ class WatchStore:
                          os.O_RDONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             os.fchmod(fd, 0o600)
             os.close(fd)
-        with _lease_lock(self.writer_path, writer=True):
+        with _lease_lock(self.writer_path, writer=True), self._legacy_writer_guard():
             if self.path is not None:
                 self._check_rename_ctime()
             migrate = self.writer_path is not None and not Path(self.writer_path).exists() and Path(self.path).exists()
@@ -105,6 +105,7 @@ class WatchStore:
                 self.db.execute('ALTER TABLE projection ADD COLUMN digest TEXT')
             self.db.execute('CREATE TABLE IF NOT EXISTS store_identity (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL)')
             self.db.execute('INSERT OR IGNORE INTO store_identity VALUES(1,?)', (str(uuid.uuid4()),))
+            self.db.execute('CREATE TABLE IF NOT EXISTS publication_access (id INTEGER PRIMARY KEY CHECK(id=1), mode INTEGER NOT NULL, gid INTEGER NOT NULL)')
             self.db.execute('CREATE TABLE IF NOT EXISTS publication_protocol (version INTEGER NOT NULL)')
             self.db.execute('DELETE FROM publication_protocol')
             self.db.execute('INSERT INTO publication_protocol VALUES(1)')
@@ -145,6 +146,26 @@ class WatchStore:
             self._publish()
             need(False, 'collector lease closed or expired')
         return wall, tick
+
+    @contextmanager
+    def _legacy_writer_guard(self):
+        fd = None
+        try:
+            if self.path is not None:
+                try:
+                    fd = os.open(self.path + '.lease-lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                except FileNotFoundError:
+                    pass
+                if fd is not None:
+                    need(stat.S_ISREG(os.fstat(fd).st_mode), 'regular legacy collector lock required')
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        need(False, 'legacy collector is active')
+            yield
+        finally:
+            if fd is not None:
+                os.close(fd)
 
     def _check_rename_ctime(self):
         fd, source = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.path).parent)
@@ -211,6 +232,13 @@ class WatchStore:
         # conflict with backup, checkpoint, fsync or replacement of this file.
         target = Path(self.path)
         info = target.stat() if target.exists() else None
+        if info is not None:
+            access = (stat.S_IMODE(info.st_mode) & 0o555, info.st_gid)
+            self.db.execute('INSERT OR REPLACE INTO publication_access VALUES(1,?,?)', access)
+        else:
+            access = self.db.execute('SELECT mode,gid FROM publication_access WHERE id=1').fetchone()
+            if access is None:
+                access = (0o400, os.getegid())
         fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=target.parent)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -219,11 +247,10 @@ class WatchStore:
                 self.db.backup(copy)
                 copy.execute('PRAGMA journal_mode=DELETE')
             os.fsync(fd)
-            if info is not None:
-                os.fchown(fd, -1, info.st_gid)
-                os.fchmod(fd, stat.S_IMODE(info.st_mode) & 0o777)
-            # A newly provisioned projection starts private (0600). Grant the
-            # reader group access explicitly, then replacements retain it.
+            os.fchown(fd, -1, access[1])
+            os.fchmod(fd, access[0] & 0o555)
+            # Retain the last published access grant in the private database,
+            # including when withdrawal removed the public inode.
             self._remove_public_journals()
             os.replace(temporary, target)
             directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
