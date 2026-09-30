@@ -40,13 +40,18 @@ def test_close_retries_when_publication_and_withdrawal_fail(published, monkeypat
     with monkeypatch.context() as patch:
         patch.setattr(w.os, 'replace', fail)
         patch.setattr(Path, 'unlink', unlink)
-        for _ in range(2):
-            with pytest.raises(OSError): store.close()
-            assert not store.closed
-            assert store.db.execute('SELECT live FROM lease').fetchone() == (0,)
+        with pytest.raises(OSError): store.close()
+        assert store.lost and not store.closed
+        assert store.db.execute('SELECT live FROM lease').fetchone() == (0,)
+        before = path.read_bytes(), path.stat().st_ino
+        store.close()
+        assert store.closed and store._lease_pin.closed and store._published_fd is None
+        assert (path.read_bytes(), path.stat().st_ino) == before
     store.close()
-    assert store.closed
-    with pytest.raises(ValueError): read(path, ledger)
+    assert read(path, ledger) is not None
+    cutoff = w.time.time() + w.LEASE_SECONDS + 1
+    monkeypatch.setattr(w.time, 'time', lambda: cutoff)
+    with pytest.raises(ValueError, match='expired'): read(path, ledger)
 
 
 @pytest.mark.parametrize('operation', ['heartbeat', 'close', 'fail', 'retire'])
@@ -81,7 +86,12 @@ def test_private_write_failure_withdraws_snapshot(published, monkeypatch, operat
             assert ledger.read_bytes() == before
         if operation == 'close':
             assert not store.closed
-            with pytest.raises(sqlite3.Error): store.close()
+            assert store.lost
+            store.close()
+            assert store.closed and store._lease_pin.closed and store._published_fd is None
+            with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+                real.execute('SELECT 1')
+            assert not path.exists() and ledger.read_bytes() == before
     store.close()
     assert store.closed
 
