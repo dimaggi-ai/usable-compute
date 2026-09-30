@@ -1007,6 +1007,7 @@
   "tests/test_sim_order.py::test_direct_sim_normalizes_or_refuses_order_reversal",
   "tests/test_snapshot_publication.py::test_legacy_database_import_requires_new_generation_and_relist",
   "tests/test_snapshot_publication.py::test_publication_retains_group_and_mode_on_a_new_inode",
+  "tests/test_snapshot_size_docs.py::test_documented_initial_snapshot_measurement",
   "tests/test_source_export.py::test_bad_hash_never_publishes_partial_bundle",
   "tests/test_source_export.py::test_export_uses_committed_bytes_preserves_working_edit",
   "tests/test_source_export.py::test_source_map_must_be_complete",

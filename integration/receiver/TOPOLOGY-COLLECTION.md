@@ -88,10 +88,10 @@ readers, or a hostile process holding shared flock or POSIX locks on a published
 file cannot delay the collector through those locks. Readers can still exhaust
 storage by retaining descriptors to replaced inodes. Each pins a whole snapshot:
 an earlier local run of the 10,000-item fixture with 600-byte padding used
-7,438,336 bytes per initial publication. Size varies with database layout and
+7,434,240 bytes per initial publication. Size varies with database layout and
 SQLite free-page growth. At three such
-publications per 30-second cycle, pinned space grows by 22,315,008 bytes per cycle
-(743,833.6 bytes/s). Inspect open deleted files with `lsof +L1` and filter its NAME
+publications per 30-second cycle, pinned space grows by 22,302,720 bytes per cycle
+(743,424 bytes/s). Inspect open deleted files with `lsof +L1` and filter its NAME
 column for the published directory; monitor free space too. Readers must close
 snapshots promptly. CPU, storage and scheduler saturation remain availability
 limits. Publication copies the entire database and fsyncs the file and directory

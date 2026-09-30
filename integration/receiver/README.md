@@ -378,8 +378,8 @@ generation are unchanged and all newer lease/ledger checks pass. Frequent
 projection changes or replacement during SQL reads can still starve readers;
 there is no availability SLA. Readers must close snapshots promptly: open old
 inodes pin whole copies and can exhaust disk space. The 10,000-item/600-byte-padding
-fixture used 7,438,336 bytes per initial publication in an earlier local run;
-three such retained copies per 30 seconds add 22,315,008 bytes per cycle.
+fixture used 7,434,240 bytes per initial publication in an earlier local run;
+three such retained copies per 30 seconds add 22,302,720 bytes per cycle.
 Size varies with database layout and SQLite growth. Monitor
 free space and open deleted files with `lsof +L1`. Every commit copies the entire
 database; tmpfs timings are not durable-disk guarantees. Use distinct service
