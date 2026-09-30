@@ -67,10 +67,15 @@ def test_private_write_failure_withdraws_snapshot(published, monkeypatch, operat
         if operation == 'retire': store.last_tick -= 46
         with pytest.raises((sqlite3.Error, OSError, ValueError)):
             getattr(store, 'heartbeat' if operation == 'retire' else operation)()
-        assert not path.exists()
         before = ledger.read_bytes()
-        with pytest.raises(ValueError): read(path, ledger)
-        assert ledger.read_bytes() == before
+        if failure == 'commit' and operation in ('heartbeat', 'fail'):
+            assert path.exists()
+            with pytest.raises(ValueError, match='closed or expired'): read(path, ledger)
+            assert len(ledger.read_text().splitlines()) == 2
+        else:
+            assert not path.exists()
+            with pytest.raises(ValueError): read(path, ledger)
+            assert ledger.read_bytes() == before
         if operation == 'close':
             assert not store.closed
             with pytest.raises(sqlite3.Error): store.close()

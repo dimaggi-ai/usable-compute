@@ -112,6 +112,8 @@ class WatchStore:
             self.owner_id = str(uuid.uuid4())
             self.closed = False
             self.lost = False
+            self._retired_published = False
+            self._published_fd = None
             self.db.execute('CREATE TABLE IF NOT EXISTS lease (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, heartbeat REAL NOT NULL, live INTEGER NOT NULL)')
             if 'generation' not in {row[1] for row in self.db.execute('PRAGMA table_info(lease)')}:
                 self.db.execute('ALTER TABLE lease ADD COLUMN generation TEXT')
@@ -123,6 +125,7 @@ class WatchStore:
             self._transaction(self._acquire)
         except BaseException:
             self.db.close()
+            self._release_publication()
             self.closed = True
             raise
 
@@ -143,7 +146,7 @@ class WatchStore:
         if not valid:
             self.db.execute('UPDATE lease SET live=0 WHERE id=1')
             self.db.execute('COMMIT')
-            self._publish()
+            self._publish_retirement()
             need(False, 'collector lease closed or expired')
         return wall, tick
 
@@ -253,6 +256,9 @@ class WatchStore:
             # including when withdrawal removed the public inode.
             self._remove_public_journals()
             os.replace(temporary, target)
+            self._release_publication()
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            self._published_fd = os.dup(fd)
             directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory)
@@ -262,25 +268,51 @@ class WatchStore:
             os.close(fd)
             Path(temporary).unlink(missing_ok=True)
 
+    def _release_publication(self):
+        if self._published_fd is not None:
+            os.close(self._published_fd)
+            self._published_fd = None
+
+    def _withdraw(self, owns):
+        if self.path is None:
+            return
+        if owns is None:
+            # Pin our last published inode so its identity cannot be recycled.
+            # The writer flock excludes replacement by another collector here.
+            if self._published_fd is None:
+                return
+            try:
+                public = os.stat(self.path, follow_symlinks=False)
+            except FileNotFoundError:
+                return
+            ours = os.fstat(self._published_fd)
+            owns = (public.st_dev, public.st_ino) == (ours.st_dev, ours.st_ino)
+        if owns:
+            Path(self.path).unlink(missing_ok=True)
+
+    def _publish_retirement(self):
+        self._publish()
+        self._retired_published = True
+        self.lost = True
+
     def _commit_checked(self, wall, tick):
         try:
             self.db.execute('COMMIT')
+            self._write_state['owns'] = True
             self._publish()
             need(0 <= time.monotonic() - tick <= COMMIT_BOUND_SECONDS
                  and 0 <= time.time() - wall <= COMMIT_BOUND_SECONDS, 'collector lease lost')
         except BaseException:
-            # Mark lost before cleanup: even a failed close cannot authorize this
-            # object again. Wall elapsed also detects a forward clock step.
             self.lost = True
-            try:
-                if self.db.in_transaction:
-                    self.db.execute('ROLLBACK')
+            if self.db.in_transaction:
+                self.db.execute('ROLLBACK')
+            self._write_state['owns'] = None
+            row = self.db.execute('SELECT owner,generation FROM lease WHERE id=1').fetchone()
+            self._write_state['owns'] = row == (self.owner_id, self.generation)
+            if self._write_state['owns']:
                 self.db.execute('UPDATE lease SET live=0 WHERE id=1 AND owner=? AND generation=?',
                                 (self.owner_id, self.generation))
-                self._publish()
-            finally:
-                if self.path is not None:
-                    Path(self.path).unlink(missing_ok=True)
+                self._publish_retirement()
             raise
 
     def _disconnect(self, prior):
@@ -292,21 +324,19 @@ class WatchStore:
     @contextmanager
     def _write_guard(self):
         with _lease_lock(self.writer_path, writer=True):
-            row = self.db.execute('SELECT owner,generation FROM lease WHERE id=1').fetchone()
-            owns = row == (self.owner_id, self.generation)
+            state = self._write_state = {'owns': None, 'rejected': False}
             try:
-                yield
-            except BaseException as exc:
+                row = self.db.execute('SELECT owner,generation FROM lease WHERE id=1').fetchone()
+                state['owns'] = row == (self.owner_id, self.generation)
+                yield state
+            except BaseException:
                 try:
                     if self.db.in_transaction:
                         self.db.execute('ROLLBACK')
                 finally:
-                    # Ownership was sampled under the same writer flock. No newer
-                    # generation can publish before withdrawal finishes.
-                    if owns and (not isinstance(exc, ValueError) or self.lost):
+                    if not state['rejected'] and not self._retired_published:
                         self.lost = True
-                        if self.path is not None:
-                            Path(self.path).unlink(missing_ok=True)
+                        self._withdraw(state['owns'])
                 raise
 
     def heartbeat(self):
@@ -318,7 +348,7 @@ class WatchStore:
                 if not 0 <= time.monotonic() - self.last_tick < LEASE_SECONDS:
                     self.db.execute('UPDATE lease SET live=0 WHERE id=1')
                     self.db.execute('COMMIT')
-                    self._publish()
+                    self._publish_retirement()
                     need(False, 'collector lease closed or expired')
                 self._commit_checked(wall, tick)
                 self.last_tick = tick
@@ -337,9 +367,10 @@ class WatchStore:
                 self._publish()
         self.closed = True
         self.db.close()
+        self._release_publication()
 
-    def _transaction(self, update):
-        with self._write_guard():
+    def _transaction(self, update, *, input_update=False):
+        with self._write_guard() as state:
             self.db.execute('BEGIN IMMEDIATE')
             try:
                 tick = time.monotonic()
@@ -351,10 +382,15 @@ class WatchStore:
                 if row:
                     need(row[1] is None or row[1] == _digest(prior), 'watch integrity mismatch')
                     if row[1] is None: prior['resync_required'] = True
-                value = update(prior)
+                try:
+                    value = update(prior)
+                    if value is not None:
+                        bounded(value)
+                except BaseException:
+                    state['rejected'] = input_update
+                    raise
                 self.db.execute('UPDATE lease SET heartbeat=? WHERE id=1', (wall,))
                 if value is not None:
-                    bounded(value)
                     self.db.execute('INSERT OR REPLACE INTO projection VALUES(1,?,?)', (json.dumps(value, sort_keys=True), _digest(value)))
                 self._commit_checked(wall, tick)
                 return value
@@ -374,6 +410,7 @@ class WatchStore:
             need(obj.get(key, value) == value, 'mixed resource type')
             obj[key] = value
         m = obj.get('metadata', {})
+        need(type(m) is dict, 'object metadata required')
         for key in ('name', 'uid', 'resourceVersion'): _identifier(m.get(key), key)
         need(m.get('namespace', '') == self.scope[3], 'resource namespace mismatch')
         return obj
@@ -387,10 +424,12 @@ class WatchStore:
 
     def _relist(self, payload, observed_at, expires_at):
         bounded(payload)
+        need(type(payload) is dict, 'list object required')
         expires_at = capped_expiry(observed_at, expires_at)
         version, kind = KINDS[self.scope[2]]
         need(payload.get('apiVersion') == version and payload.get('kind') == kind+'List', 'list type mismatch')
         meta = payload.get('metadata', {})
+        need(type(meta) is dict, 'list metadata required')
         rv = _identifier(meta.get('resourceVersion'), 'list resourceVersion')
         need(not meta.get('continue') and meta.get('remainingItemCount', 0) == 0, 'incomplete list')
         rows = payload.get('items')
@@ -407,7 +446,7 @@ class WatchStore:
             return dict(scope=self.scope, generation=self.generation, session=session, resource_version=rv, records=records,
                         observed_at=observed_at, expires_at=expires_at, resync_required=False,
                         events=0, last_event=None, transport_digest=self.transport_digest)
-        self._transaction(update)
+        self._transaction(update, input_update=True)
         self.session = session
         self.heartbeat()
 
@@ -432,7 +471,9 @@ class WatchStore:
                         version, kind = KINDS[self.scope[2]]
                         need(type(event['object']) is dict and event['object'].get('apiVersion') == version
                              and event['object'].get('kind') == kind, 'bookmark type mismatch')
-                        rv = _identifier(event['object'].get('metadata', {}).get('resourceVersion'), 'bookmark version')
+                        meta = event['object'].get('metadata', {})
+                        need(type(meta) is dict, 'bookmark metadata required')
+                        rv = _identifier(meta.get('resourceVersion'), 'bookmark version')
                     else:
                         obj = self._object(event['object']); m = obj['metadata']; rv = m['resourceVersion']; name = m['name']
                         old = prior['records'].get(name)
@@ -450,7 +491,7 @@ class WatchStore:
                 if events:
                     prior['observed_at'], prior['expires_at'] = observed_at, expires_at
                 return prior
-            result = self._transaction(update)
+            result = self._transaction(update, input_update=True)
             self.heartbeat()
             return result
         except BaseException:
