@@ -43,7 +43,8 @@ def _lease_lock(path, *, writer=False):
     if path is None:  # Private :memory: stores cannot be read by read_current.
         yield
         return
-    fd = os.open(str(path) + '.lease-lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    retained = isinstance(path, int)
+    fd = path if retained else os.open(str(path) + '.lease-lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         need(stat.S_ISREG(os.fstat(fd).st_mode), 'regular collector lease lock required')
         deadline = time.perf_counter() + 5
@@ -56,7 +57,10 @@ def _lease_lock(path, *, writer=False):
                 time.sleep(0.01)
         yield
     finally:
-        os.close(fd)
+        if retained:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        else:
+            os.close(fd)
 
 
 class WatchStore:
@@ -131,11 +135,17 @@ class WatchStore:
             self.last_tick = time.monotonic()
             self.session = None
             self.transport_digest = None
+            self._lease_pin = None
+            if self.writer_path is not None:
+                fd = os.open(self.writer_path + '.lease-lock', os.O_RDONLY | os.O_NOFOLLOW)
+                self._lease_pin = os.fdopen(fd, 'rb')
         try:
             self._transaction(self._acquire)
         except BaseException:
             self.db.close()
             self._release_publication()
+            if self._lease_pin is not None:
+                self._lease_pin.close()
             self.closed = True
             raise
 
@@ -411,23 +421,47 @@ class WatchStore:
             prior['resync_required'] = True
         return prior
 
+    def _check_runtime_placement(self):
+        if self.writer_path is None:
+            return
+        try:
+            lock = os.stat(self.writer_path + '.lease-lock', follow_symlinks=False)
+            retained = os.fstat(self._lease_pin.fileno())
+            need((lock.st_dev, lock.st_ino) == (retained.st_dev, retained.st_ino),
+                 'collector publication placement unavailable')
+            need(self._mount_identity(Path(self.writer_path).parent) ==
+                 self._mount_identity(Path(self.path).parent),
+                 'collector directory and publication require the same filesystem and mount')
+        except (OSError, KeyError) as error:
+            need(False, 'collector publication placement unavailable')
+
     @contextmanager
     def _write_guard(self):
-        with _lease_lock(self.writer_path, writer=True):
-            state = self._write_state = {'owns': None, 'rejected': False}
-            try:
-                row = self.db.execute('SELECT owner,generation FROM lease WHERE id=1').fetchone()
-                state['owns'] = row == (self.owner_id, self.generation)
-                yield state
-            except BaseException:
+        state = self._write_state = {'owns': None, 'rejected': False}
+        locked = False
+        try:
+            with _lease_lock(self._lease_pin.fileno() if self._lease_pin is not None else None, writer=True):
+                locked = True
                 try:
-                    if self.db.in_transaction:
-                        self.db.execute('ROLLBACK')
-                finally:
-                    if not state['rejected'] and not self._retired_published:
-                        self.lost = True
-                        self._withdraw(state['owns'])
-                raise
+                    self._check_runtime_placement()
+                    row = self.db.execute('SELECT owner,generation FROM lease WHERE id=1').fetchone()
+                    state['owns'] = row == (self.owner_id, self.generation)
+                    yield state
+                except BaseException:
+                    try:
+                        if self.db.in_transaction:
+                            self.db.execute('ROLLBACK')
+                    finally:
+                        if not state['rejected'] and not self._retired_published:
+                            self.lost = True
+                            self._withdraw(state['owns'])
+                    raise
+        except BaseException:
+            if not locked:
+                self.lost = True
+                self._release_publication()
+                need(False, 'collector lease lock unavailable; publication expires at its existing cutoff')
+            raise
 
     def heartbeat(self):
         with self._write_guard():
@@ -452,6 +486,8 @@ class WatchStore:
             self.closed = True
             self.db.close()
             self._release_publication()
+            if self._lease_pin is not None:
+                self._lease_pin.close()
             return
         with self._write_guard():
             self.db.execute('BEGIN IMMEDIATE')
@@ -463,6 +499,8 @@ class WatchStore:
         self.closed = True
         self.db.close()
         self._release_publication()
+        if self._lease_pin is not None:
+            self._lease_pin.close()
 
     def _transaction(self, update, *, input_update=False):
         with self._write_guard() as state:
