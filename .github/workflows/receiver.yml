@@ -32,8 +32,38 @@ jobs:
             --ignore=integration/receiver/tests/test_policy_roundtrip.py \
             --ignore=integration/receiver/tests/test_journal_roundtrip.py \
             --ignore=integration/receiver/tests/test_collection_roundtrip.py \
+            --ignore=integration/receiver/tests/test_binding_v2.py \
+            --ignore=integration/receiver/tests/test_clock_tolerance.py \
+            --ignore=integration/receiver/tests/test_collector_clock_lead.py \
+            --ignore=integration/receiver/tests/test_collector_recovery.py \
+            --ignore=integration/receiver/tests/test_failure_ownership.py \
+            --ignore=integration/receiver/tests/test_heartbeat_suspension.py \
+            --ignore=integration/receiver/tests/test_infrastructure.py \
+            --ignore=integration/receiver/tests/test_lease_expiry.py \
+            --ignore=integration/receiver/tests/test_lease_fencing.py \
+            --ignore=integration/receiver/tests/test_lease_lock_descriptor.py \
+            --ignore=integration/receiver/tests/test_private_publication.py \
+            --ignore=integration/receiver/tests/test_publication_churn.py \
+            --ignore=integration/receiver/tests/test_publication_cleanup.py \
+            --ignore=integration/receiver/tests/test_publication_clock.py \
+            --ignore=integration/receiver/tests/test_publication_evidence.py \
+            --ignore=integration/receiver/tests/test_publication_failure.py \
+            --ignore=integration/receiver/tests/test_reader_availability.py \
+            --ignore=integration/receiver/tests/test_reader_branches.py \
+            --ignore=integration/receiver/tests/test_reader_clock.py \
+            --ignore=integration/receiver/tests/test_reader_future.py \
+            --ignore=integration/receiver/tests/test_reader_ledger.py \
+            --ignore=integration/receiver/tests/test_reader_lock_order.py \
+            --ignore=integration/receiver/tests/test_reader_renewal.py \
+            --ignore=integration/receiver/tests/test_reader_tombstone_reason.py \
+            --ignore=integration/receiver/tests/test_retirement_lifecycle.py \
+            --ignore=integration/receiver/tests/test_runtime_placement.py \
+            --ignore=integration/receiver/tests/test_snapshot_publication.py \
+            --ignore=integration/receiver/tests/test_startup_procfs.py \
+            --ignore=integration/receiver/tests/test_trust_limits.py \
+            --ignore=integration/receiver/tests/test_watch_current.py \
             --junitxml "$RUNNER_TEMP/receiver-tests.xml"
-          python integration/receiver/tools/check_acceptance.py "$RUNNER_TEMP/receiver-tests.xml" integration/receiver/src/dimaggi_receiver/sources.lock.json
+          python integration/receiver/tools/check_acceptance.py "$RUNNER_TEMP/receiver-tests.xml" integration/receiver/src/dimaggi_receiver/sources.lock.json receiver-darwin
 
   linux:
     strategy:

@@ -57,14 +57,15 @@ def test_gate_refuses_critical_only_selection(tmp_path):
     with pytest.raises(ValueError): module.check(path, tmp_path/'sources.lock.json')
 
 
-def test_ci_manifest_matches_current_collection():
+@pytest.mark.parametrize('suite', ['receiver', 'receiver-darwin'])
+def test_ci_manifest_matches_current_collection(suite):
     import importlib.util
     from pathlib import Path
     path = Path(__file__).resolve().parents[1]/'tools/ci_test_manifest.py'
     spec = importlib.util.spec_from_file_location('ci_manifest', path)
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     import json
-    assert module.collect('receiver') == json.loads(module.manifest_path('receiver').read_text())
+    assert module.collect(suite) == json.loads(module.manifest_path(suite).read_text())
 
 
 @pytest.mark.parametrize('mutation', ['remove', 'duplicate'])
@@ -105,3 +106,34 @@ def test_tools_gate_requires_complete_passing_manifest(tmp_path, mutation):
     if mutation == 'none': module.check(xml, lock, 'tools')
     else:
         with pytest.raises(ValueError): module.check(xml, lock, 'tools')
+
+
+@pytest.mark.parametrize('pin', [OLD, 'f'*40])
+@pytest.mark.parametrize('mutation', ['none', 'remove', 'duplicate', 'extra', 'skip'])
+def test_darwin_gate_requires_complete_platform_manifest(tmp_path, pin, mutation):
+    import json
+    from pathlib import Path
+    path, tree = document(tmp_path, pin)
+    module = checker()
+    spec_path = Path(module.__file__).with_name('ci_test_manifest.py')
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('manifest', spec_path)
+    manifest = importlib.util.module_from_spec(spec); spec.loader.exec_module(manifest)
+    required = {manifest.junit_identity(node) for node in
+                json.loads(manifest.manifest_path('receiver-darwin').read_text())}
+    suite = next(tree.getroot().iter('testsuite'))
+    for case in list(suite.findall('testcase')):
+        if (case.get('classname'), case.get('name')) not in required:
+            suite.remove(case)
+    case = next(c for c in suite.findall('testcase') if c.get('classname') == 'tests.test_reader_platform')
+    if mutation == 'remove': suite.remove(case)
+    if mutation == 'duplicate': suite.append(copy.deepcopy(case))
+    if mutation == 'extra': ET.SubElement(suite, 'testcase', classname='tests.extra', name='test_extra')
+    if mutation == 'skip':
+        ET.SubElement(case, 'skipped', type='pytest.skip')
+        suite.set('skipped', str(int(suite.get('skipped')) + 1))
+    suite.set('tests', str(len(suite.findall('testcase'))))
+    tree.write(path)
+    if mutation == 'none': module.check(path, tmp_path/'sources.lock.json', 'receiver-darwin')
+    else:
+        with pytest.raises(ValueError): module.check(path, tmp_path/'sources.lock.json', 'receiver-darwin')

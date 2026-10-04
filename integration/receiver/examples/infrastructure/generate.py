@@ -154,7 +154,7 @@ def observations(request, planned):
     )
 
 
-if __name__ == "__main__":
+def generate():
     r, q = fixtures()
     pin = digest(r)
     now = "2026-09-20T12:00:01Z"
@@ -173,3 +173,34 @@ if __name__ == "__main__":
         pins={"registry_digest": pin, "as_of": now},
     ).items():
         Path(__file__).with_name(name + ".json").write_text(dumps(value))
+
+
+if __name__ == "__main__":
+    import os
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from dimaggi_receiver.observations import _utc
+
+    stamp = _utc("2026-09-20T12:00:01Z").timestamp()
+    published = {}
+    replace, fstat = os.replace, os.fstat
+
+    def publish(src, dst):
+        result = replace(src, dst)
+        info = os.stat(dst)
+        published[info.st_dev, info.st_ino] = stamp
+        return result
+
+    def snapshot_stat(fd):
+        info = fstat(fd)
+        timestamp = published.get((info.st_dev, info.st_ino))
+        if timestamp is None:
+            return info
+        fields = {name: getattr(info, name) for name in dir(info) if name.startswith('st_')}
+        fields.update(st_ctime=timestamp, st_ctime_ns=int(timestamp*1e9))
+        return SimpleNamespace(**fields)
+
+    with patch('time.time', return_value=stamp), patch('os.replace', publish), \
+            patch('os.fstat', snapshot_stat), \
+            patch('uuid.uuid4', return_value='00000000-0000-4000-8000-000000000001'):
+        generate()

@@ -18,7 +18,7 @@
   "schema": "dimaggi-infrastructure-cpu-binding/v2",
   "topology_resource_version": "12",
   "topology_session": "synthetic-session",
-  "topology_snapshot_digest": "sha256:13baf5f531231fff146b03e17421b4f8c0797cb4178231c20c41b92fdb3dacb0",
+  "topology_snapshot_digest": "sha256:30728cd3c576f8e26824714b6ae79666770f6559dd0e35b0a47466c78f396024",
   "valid_from": "2026-09-20T12:00:01Z",
   "valid_until": "2026-09-20T12:05:00Z",
   "workload_id": "payload-1"

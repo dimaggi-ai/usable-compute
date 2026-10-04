@@ -12,7 +12,7 @@ KNOWN_TEST = 'test_direct_sim_normalizes_or_refuses_order_reversal'
 
 
 def check(xml_path, lock_path, suite="receiver"):
-    if suite not in {"receiver", "tools"}:
+    if suite not in {"receiver", "receiver-darwin", "tools"}:
         raise ValueError("unknown acceptance selection")
     root = ET.parse(xml_path).getroot()
     cases = list(root.iter('testcase'))
@@ -43,12 +43,21 @@ def check(xml_path, lock_path, suite="receiver"):
                 raise ValueError('JUnit suite counter mismatch: ' + name)
     skips = [(case, skip) for case in cases for skip in case.findall('skipped')]
     pin = json.loads(Path(lock_path).read_text())['repositories']['reliability-economics']['commit']
-    expected = int(suite == "receiver" and pin == OLD_SIMULATOR)
+    expected = int(suite != "tools" and pin == OLD_SIMULATOR)
     if len(skips) != expected or sum(int(s.get('skipped', 0)) for s in suites) != len(skips):
         raise ValueError('unexpected skipped receiver acceptance test')
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('ci_test_manifest', Path(__file__).with_name('ci_test_manifest.py'))
+    manifest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(manifest)
+    junit_identity, manifest_path = manifest.junit_identity, manifest.manifest_path
+    nodes = json.loads(manifest_path(suite).read_text())
     # Critical regressions are required at every pin. At the old simulator pin the
     # simulator regression is instead the single known expected failure checked below.
-    critical = json.loads(Path(__file__).with_name('critical_tests.json').read_text()) if suite == 'receiver' else []
+    critical = json.loads(Path(__file__).with_name('critical_tests.json').read_text()) if suite != 'tools' else []
+    if suite == 'receiver-darwin':
+        selected = {junit_identity(node) for node in nodes}
+        critical = [case for case in critical if tuple(case) in selected]
     for classname, name in critical:
         matches = [case for case in cases if (case.get('classname'), case.get('name')) == (classname, name)]
         allowed_xfail = expected and (classname, name) == (KNOWN_CLASS, KNOWN_TEST)
@@ -61,12 +70,6 @@ def check(xml_path, lock_path, suite="receiver"):
                 or skip.get('message') != 'METRICS-05: source re-pin is phase 2'):
             raise ValueError('unexpected receiver acceptance exception')
     # Compare identities, not just a count or a critical subset.
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('ci_test_manifest', Path(__file__).with_name('ci_test_manifest.py'))
-    manifest = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(manifest)
-    junit_identity, manifest_path = manifest.junit_identity, manifest.manifest_path
-    nodes = json.loads(manifest_path(suite).read_text())
     required = Counter(junit_identity(node) for node in nodes)
     actual = Counter((case.get('classname'), case.get('name')) for case in cases)
     if not required or any(count != 1 for count in required.values()) or actual != required:

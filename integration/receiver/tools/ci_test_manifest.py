@@ -9,7 +9,9 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
-SUITES = {'receiver': 'receiver.yml', 'tools': 'evidence.yml'}
+SUITES = {'receiver': ('receiver.yml', 'linux'),
+          'receiver-darwin': ('receiver.yml', 'receiver'),
+          'tools': ('evidence.yml', 'validate')}
 
 
 def manifest_path(suite):
@@ -18,20 +20,20 @@ def manifest_path(suite):
 
 def selection(suite):
     import yaml
-    workflow = yaml.safe_load((ROOT/'.github/workflows'/SUITES[suite]).read_text())
+    filename, job = SUITES[suite]
+    workflow = yaml.safe_load((ROOT/'.github/workflows'/filename).read_text())
     selections = []
-    for job in workflow['jobs'].values():
-        for step in job['steps']:
-            command = step.get('run', '').replace('\\\n', ' ')
-            for line in command.splitlines():
-                args = shlex.split(line)
-                if args[:3] != ['python', '-m', 'pytest']:
-                    continue
-                args = args[3:]
-                if '--junitxml' in args:
-                    index = args.index('--junitxml')
-                    del args[index:index+2]
-                selections.append(args)
+    for step in workflow['jobs'][job]['steps']:
+        command = step.get('run', '').replace('\\\n', ' ')
+        for line in command.splitlines():
+            args = shlex.split(line)
+            if args[:3] != ['python', '-m', 'pytest']:
+                continue
+            args = args[3:]
+            if '--junitxml' in args:
+                index = args.index('--junitxml')
+                del args[index:index+2]
+            selections.append(args)
     if not selections or any(args != selections[0] for args in selections):
         raise ValueError('one consistent CI selection required')
     return selections[0]

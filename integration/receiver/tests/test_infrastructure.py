@@ -538,3 +538,16 @@ def test_unknown_metrics_are_not_zero_or_false_slo_proof():
     assert {"power_watts", "max_latency_p99_us", "max_restore_seconds"} <= set(
         result["allocations"][0]["unchecked_constraints"]
     )
+
+
+def test_example_generator_is_deterministic_without_pytest_clock(tmp_path):
+    import subprocess
+    import sys
+
+    source = Path(fixture.__file__)
+    script = tmp_path/source.name
+    script.write_bytes(source.read_bytes())
+    for _ in range(2):
+        subprocess.run([sys.executable, str(script)], check=True, timeout=10)
+        for expected in source.parent.glob('*.json'):
+            assert (tmp_path/expected.name).read_bytes() == expected.read_bytes()
