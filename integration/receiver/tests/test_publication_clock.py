@@ -87,6 +87,7 @@ def test_chmod_during_sql_keeps_pre_read_witness(published, monkeypatch):
         db = original(*args, **kwargs)
         return MetadataChange(db) if kwargs.get("uri") else db
     monkeypatch.setattr(sqlite3, 'connect', connect)
-    _, _, _, lease, _, stamp = w._read_rows(path)
-    assert stamp-lease[1] < 0.05
-    assert path.stat().st_ctime-lease[1] > 0.05
+    before = path.stat().st_ctime
+    _, _, _, _, _, stamp = w._read_rows(path)
+    assert stamp == before
+    assert path.stat().st_ctime > stamp

@@ -51,10 +51,11 @@ def test_stopped_publication_is_never_late_current(tmp_path, phase, stop_delay=0
 import os, signal, stat, sys, time, sqlite3
 from datetime import datetime, timezone
 from dimaggi_receiver import topology_watch as w
-w.COMMIT_BOUND_SECONDS = 0.1
 iso=lambda t:datetime.fromtimestamp(t,timezone.utc).isoformat().replace('+00:00','Z')
 s=w.WatchStore(sys.argv[1], 't','c','nodes'); t=time.time()
 s.relist({'apiVersion':'v1','kind':'NodeList','metadata':{'resourceVersion':'1'},'items':[]},iso(t),iso(t+290))
+# Apply the short bound to the injected suspension, not startup disk latency.
+w.COMMIT_BOUND_SECONDS = 0.1
 phase=sys.argv[2]; fired=set()
 def stop(key):
  if key not in fired:

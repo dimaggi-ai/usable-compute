@@ -31,6 +31,7 @@ from .expiry_ledger import check_generation, initialize_expiry_ledger
 LEASE_SECONDS = 45
 CLOCK_TOLERANCE_SECONDS = 2
 COMMIT_BOUND_SECONDS = 10
+BACKUP_TIMEOUT_SECONDS = 10
 
 KINDS = {'nodes': ('v1', 'Node'), 'resourceslices': ('resource.k8s.io/v1', 'ResourceSlice'),
          'resourceclaims': ('resource.k8s.io/v1', 'ResourceClaim')}
@@ -105,7 +106,7 @@ class WatchStore:
             if migrate:
                 uri = 'file:' + quote(self.path, safe='/') + '?mode=ro'
                 with closing(sqlite3.connect(uri, uri=True, timeout=5)) as prior:
-                    prior.backup(self.db)
+                    self._backup(prior, self.db)
             if self.path is not None:
                 Path(self.path + '.lease-lock').unlink(missing_ok=True)
                 self._remove_public_journals()
@@ -326,6 +327,14 @@ class WatchStore:
             self._release_publication()
             raise
 
+    @staticmethod
+    def _backup(source, target):
+        deadline = time.perf_counter() + BACKUP_TIMEOUT_SECONDS
+        def progress(status, remaining, total):
+            if time.perf_counter() >= deadline:
+                raise TimeoutError()
+        source.backup(target, pages=128, progress=progress, sleep=0.01)
+
     def _publish_snapshot(self):
         if self.path is None:
             return
@@ -336,11 +345,13 @@ class WatchStore:
         fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
         pin = None
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.fchmod(fd, 0o600)
             with closing(sqlite3.connect(temporary, isolation_level=None)) as copy:
-                self.db.backup(copy)
+                self._backup(self.db, copy)
                 copy.execute('PRAGMA journal_mode=DELETE')
+            # Darwin flock conflicts with SQLite's record locks. The separate
+            # writer lock excludes restart cleanup while SQLite owns this copy.
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.fsync(fd)
             pin = open(temporary, 'rb')
             os.fchown(fd, -1, access[1])
