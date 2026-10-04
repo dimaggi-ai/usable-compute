@@ -336,11 +336,15 @@ class WatchStore:
         fd, temporary = tempfile.mkstemp(prefix=self._temporary_prefix(), dir=Path(self.writer_path).parent)
         pin = None
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.fchmod(fd, 0o600)
             with closing(sqlite3.connect(temporary, isolation_level=None)) as copy:
                 self.db.backup(copy)
                 copy.execute('PRAGMA journal_mode=DELETE')
+            # Darwin coordinates flock with SQLite's file locks. Locking this
+            # inode before backup can block our own second descriptor forever.
+            # The writer lease lock already excludes competing publication and
+            # startup cleanup while SQLite builds the private temporary copy.
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             os.fsync(fd)
             pin = open(temporary, 'rb')
             os.fchown(fd, -1, access[1])

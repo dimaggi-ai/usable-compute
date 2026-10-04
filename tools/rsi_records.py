@@ -44,8 +44,14 @@ def pairs(items):
     return result
 
 
-def load(raw):
-    require(len(raw) <= MAX_BYTES, "record exceeds byte limit")
+def load(raw, *, root_array_limits=None, max_bytes=MAX_BYTES):
+    """Load bounded JSON; trusted callers may size named top-level arrays.
+
+    Array overrides do not apply to nested arrays or relax the depth limit.
+    Ordinary records and all admission inputs keep the default 256-entry cap.
+    """
+    root_array_limits = root_array_limits or {}
+    require(len(raw) <= max_bytes, "record exceeds byte limit")
     def invalid_constant(value):
         raise ValueError("non-finite JSON number: " + value)
     try:
@@ -53,13 +59,14 @@ def load(raw):
                            parse_constant=invalid_constant)
     except (UnicodeError, RecursionError) as error:
         raise ValueError("invalid UTF-8 or excessive JSON depth") from error
-    def bounded(node, depth=0):
+    def bounded(node, depth=0, array_limit=256):
         require(depth <= 16, "record exceeds depth limit")
         if isinstance(node, dict):
-            for value in node.values():
-                bounded(value, depth + 1)
+            for key, value in node.items():
+                limit = root_array_limits.get(key, 256) if depth == 0 else 256
+                bounded(value, depth + 1, limit)
         elif isinstance(node, list):
-            require(len(node) <= 256, "record array exceeds 256 entries")
+            require(len(node) <= array_limit, f"record array exceeds {array_limit} entries")
             for value in node:
                 bounded(value, depth + 1)
         elif isinstance(node, str):
