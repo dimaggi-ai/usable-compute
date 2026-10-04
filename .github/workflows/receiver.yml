@@ -27,7 +27,7 @@ jobs:
           DIMAGGI_EXPECT_SOURCES: '1'
           DIMAGGI_TEST_SOURCES: ${{ runner.temp }}/receiver-inputs/export
         run: |
-          python -m pytest integration/receiver/tests -v --durations=10 \
+          python -m pytest integration/receiver/tests -q \
             --ignore=integration/receiver/tests/test_infrastructure_roundtrip.py \
             --ignore=integration/receiver/tests/test_policy_roundtrip.py \
             --ignore=integration/receiver/tests/test_journal_roundtrip.py \
@@ -90,7 +90,7 @@ jobs:
           DIMAGGI_EXPECT_SOURCES: '1'
           DIMAGGI_TEST_SOURCES: ${{ runner.temp }}/receiver-inputs/export
         run: |
-          python -m pytest integration/receiver/tests -v --durations=10 \
+          python -m pytest integration/receiver/tests -q \
             --ignore=integration/receiver/tests/test_infrastructure_roundtrip.py \
             --ignore=integration/receiver/tests/test_policy_roundtrip.py \
             --ignore=integration/receiver/tests/test_journal_roundtrip.py \

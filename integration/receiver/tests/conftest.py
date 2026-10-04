@@ -1,20 +1,8 @@
 import os
-import faulthandler
 import time
 _REAL_TIME = time.time
 from pathlib import Path
 import pytest
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_protocol(item, nextitem):
-    # Include fixture setup and teardown; exit even if a C call holds the GIL.
-    with open(os.dup(2), 'w') as output:
-        faulthandler.dump_traceback_later(60, file=output, exit=True)
-        try:
-            yield
-        finally:
-            faulthandler.cancel_dump_traceback_later()
 
 
 def pytest_sessionstart(session):
