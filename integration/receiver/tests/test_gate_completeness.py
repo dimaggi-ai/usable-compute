@@ -81,10 +81,19 @@ def test_noncritical_manifest_case_required_exactly_once(tmp_path, mutation):
 
 @pytest.mark.parametrize('mutation', ['none', 'remove', 'duplicate', 'extra', 'skip'])
 def test_tools_gate_requires_complete_passing_manifest(tmp_path, mutation):
+    _assert_manifest_gate(tmp_path, mutation, 'tools')
+
+
+@pytest.mark.parametrize('mutation', ['none', 'remove', 'duplicate', 'extra', 'skip'])
+def test_macos_gate_requires_complete_passing_manifest(tmp_path, mutation):
+    _assert_manifest_gate(tmp_path, mutation, 'macos_compatibility')
+
+
+def _assert_manifest_gate(tmp_path, mutation, selection):
     import json
     from pathlib import Path
     module = checker()
-    manifest_file = Path(module.__file__).with_name('tools_tests.json')
+    manifest_file = Path(module.__file__).with_name(selection + '_tests.json')
     root = ET.Element('testsuites')
     suite = ET.SubElement(root, 'testsuite', failures='0', errors='0', skipped='0')
     ET.SubElement(ET.SubElement(suite, 'properties'), 'property', name='receiver_xfail_policy', value='strict-v1')
@@ -102,6 +111,6 @@ def test_tools_gate_requires_complete_passing_manifest(tmp_path, mutation):
     suite.set('tests', str(len(suite.findall('testcase'))))
     xml = tmp_path/'tools.xml'; ET.ElementTree(root).write(xml)
     lock = Path(module.__file__).parent.parent/'src/dimaggi_receiver/sources.lock.json'
-    if mutation == 'none': module.check(xml, lock, 'tools')
+    if mutation == 'none': module.check(xml, lock, selection)
     else:
-        with pytest.raises(ValueError): module.check(xml, lock, 'tools')
+        with pytest.raises(ValueError): module.check(xml, lock, selection)

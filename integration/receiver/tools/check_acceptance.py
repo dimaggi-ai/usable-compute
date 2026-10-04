@@ -1,4 +1,4 @@
-"""Check receiver JUnit results with one source-pin-specific expected failure."""
+"""Check the named CI selection, with one receiver pin-specific exception."""
 from collections import Counter
 import json
 import re
@@ -12,7 +12,7 @@ KNOWN_TEST = 'test_direct_sim_normalizes_or_refuses_order_reversal'
 
 
 def check(xml_path, lock_path, suite="receiver"):
-    if suite not in {"receiver", "tools"}:
+    if suite not in {"receiver", "tools", "macos_compatibility"}:
         raise ValueError("unknown acceptance selection")
     root = ET.parse(xml_path).getroot()
     cases = list(root.iter('testcase'))
@@ -71,7 +71,7 @@ def check(xml_path, lock_path, suite="receiver"):
     actual = Counter((case.get('classname'), case.get('name')) for case in cases)
     if not required or any(count != 1 for count in required.values()) or actual != required:
         raise ValueError('JUnit case set differs from CI manifest')
-    print(f'Acceptance gate passed: {len(cases)} cases, {expected} known expected failure')
+    print(f'{suite} CI gate passed: {len(cases)} cases, {expected} known expected failure')
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   receiver:
-    runs-on: macos-14
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Build and install wheel
-        run: bash integration/receiver/tools/qualify_offline.sh integration/receiver/requirements-darwin-arm64-py312.lock
+        run: bash integration/receiver/tools/qualify_offline.sh integration/receiver/requirements-linux-x86_64-py312.lock
       - name: Export exact public source objects
         run: |
           python integration/receiver/tools/ci_export_sources.py
@@ -39,8 +39,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: ubuntu-24.04
-            lock: requirements-linux-x86_64-py312.lock
           - runner: ubuntu-24.04-arm
             lock: requirements-linux-aarch64-py312.lock
     runs-on: ${{ matrix.runner }}
@@ -67,3 +65,30 @@ jobs:
             --ignore=integration/receiver/tests/test_collection_roundtrip.py \
             --junitxml "$RUNNER_TEMP/receiver-tests.xml"
           python integration/receiver/tools/check_acceptance.py "$RUNNER_TEMP/receiver-tests.xml" integration/receiver/src/dimaggi_receiver/sources.lock.json
+
+  macos_compatibility:
+    name: macOS offline compatibility and expected refusal
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Build and install wheel
+        run: bash integration/receiver/tools/qualify_offline.sh integration/receiver/requirements-darwin-arm64-py312.lock
+      - name: Export exact public source objects
+        run: python integration/receiver/tools/ci_export_sources.py
+      - name: Offline models, source integrity, and unsupported reader refusal
+        env:
+          DIMAGGI_EXPECT_SOURCES: '1'
+          DIMAGGI_TEST_SOURCES: ${{ runner.temp }}/receiver-inputs/export
+        run: |
+          python -m pytest \
+            integration/receiver/tests/test_receiver.py \
+            integration/receiver/tests/test_sim_order.py \
+            integration/receiver/tests/test_source_export.py \
+            integration/receiver/tests/test_publication_backup.py \
+            integration/receiver/tests/test_development_version.py -q \
+            --junitxml "$RUNNER_TEMP/macos-compatibility-tests.xml"
+          python integration/receiver/tools/check_acceptance.py "$RUNNER_TEMP/macos-compatibility-tests.xml" integration/receiver/src/dimaggi_receiver/sources.lock.json macos_compatibility

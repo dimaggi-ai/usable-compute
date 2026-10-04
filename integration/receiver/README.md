@@ -219,9 +219,14 @@ before domain evaluation. The byte limit does not bound total Python process
 memory or domain evaluation cost. Large journal exports still require a separate
 bounded transport design; this change does not add pagination or truncate them.
 
-The installed-receiver GitHub workflow is configured to build on macOS and both
-Linux architectures, export the same eight pinned source commits, verify their
-file hashes and run source-bound tests. The JUnit gate allows exactly the named
+The installed-receiver GitHub workflow runs the complete receiver selection on
+Linux x86_64 (`receiver`) and aarch64 (`linux`). A separate macOS arm64 job checks
+offline model replay, source integrity, simulator ordering, package development
+identity, and bounded publication followed by the documented non-Linux reader
+refusal. This macOS compatibility job does not qualify current-evidence reading
+or replace either full Linux gate. All three jobs build the installed wheel,
+export the same eight pinned source commits and verify their file hashes.
+The full receiver JUnit gate allows exactly the named
 strict simulator xfail while its old commit remains pinned; every other skip
 refuses. Pytest defaults to strict xfail; the report hook also turns explicitly
 non-strict XPASS into a failing exit. The gate requires the hook's policy marker,
@@ -234,8 +239,10 @@ The gate also requires the complete JUnit case set to equal the committed
 `tools/receiver_tests.json` manifest: every expected identity exactly once, with
 no extras. Suite counters for tests, skips, failures and errors must match the
 actual cases. The evidence workflow gates all root `tools` tests, including RSI,
-against `tools/tools_tests.json` with no allowed exceptions. Both manifests are
-produced by `pytest --collect-only` over the workflow selections. After an intended
+against `tools/tools_tests.json` with no allowed exceptions. The separate macOS
+compatibility selection has its own `tools/macos_compatibility_tests.json`
+manifest and allows no skipped tests or expected failures. Each manifest is
+produced by `pytest --collect-only` over its named workflow jobs. After an intended
 test-selection change, run `python integration/receiver/tools/ci_test_manifest.py`
 from the repository root with the source bundle configured. Use `--check` to
 verify without writing; staleness tests also compare current collection to each

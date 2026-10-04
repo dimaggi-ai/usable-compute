@@ -8,8 +8,10 @@ ROOT=Path(__file__).resolve().parents[3]
 def test_linux_ci_uses_hashed_platform_locks():
     jobs=yaml.safe_load((ROOT/'.github/workflows/receiver.yml').read_text())['jobs']
     assert 'linux' in jobs
+    assert jobs['receiver']['runs-on'] == 'ubuntu-24.04'
+    assert 'requirements-linux-x86_64-py312.lock' in str(jobs['receiver'])
     matrix=jobs['linux']['strategy']['matrix']['include']
-    assert {row['runner'] for row in matrix} == {'ubuntu-24.04','ubuntu-24.04-arm'}
+    assert {row['runner'] for row in matrix} == {'ubuntu-24.04-arm'}
     for row in matrix:
         path=ROOT/'integration/receiver'/row['lock']
         text=path.read_text()
@@ -19,7 +21,8 @@ def test_linux_ci_uses_hashed_platform_locks():
 
 def test_macos_ci_has_no_unhashed_network_install():
     jobs=yaml.safe_load((ROOT/'.github/workflows/receiver.yml').read_text())['jobs']
-    steps=jobs['receiver']['steps']
+    steps=jobs['macos_compatibility']['steps']
+    assert jobs['macos_compatibility']['runs-on'] == 'macos-14'
     build=next(step['run'] for step in steps if step.get('name') == 'Build and install wheel')
     assert 'qualify_offline.sh' in build
     assert 'requirements-darwin-arm64-py312.lock' in build
@@ -45,7 +48,7 @@ def test_actions_are_exact_commit_pins_with_version_comments():
 
 def test_both_platforms_export_and_require_source_acceptance():
     jobs=yaml.safe_load((ROOT/'.github/workflows/receiver.yml').read_text())['jobs']
-    for name in ('receiver','linux'):
+    for name in ('receiver','linux','macos_compatibility'):
         steps=jobs[name]['steps']
         assert any('ci_export_sources.py' in step.get('run','') for step in steps)
         test=next(s for s in steps if 'check_acceptance.py' in s.get('run',''))

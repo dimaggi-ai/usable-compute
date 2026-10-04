@@ -9,7 +9,9 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
-SUITES = {'receiver': 'receiver.yml', 'tools': 'evidence.yml'}
+SUITES = {'receiver': ('receiver.yml', {'receiver', 'linux'}),
+          'tools': ('evidence.yml', {'validate'}),
+          'macos_compatibility': ('receiver.yml', {'macos_compatibility'})}
 
 
 def manifest_path(suite):
@@ -18,9 +20,14 @@ def manifest_path(suite):
 
 def selection(suite):
     import yaml
-    workflow = yaml.safe_load((ROOT/'.github/workflows'/SUITES[suite]).read_text())
+    filename, jobs = SUITES[suite]
+    workflow = yaml.safe_load((ROOT/'.github/workflows'/filename).read_text())
+    if not jobs <= set(workflow['jobs']):
+        raise ValueError('required CI selection job missing: ' + suite)
     selections = []
-    for job in workflow['jobs'].values():
+    for name, job in workflow['jobs'].items():
+        if name not in jobs:
+            continue
         for step in job['steps']:
             command = step.get('run', '').replace('\\\n', ' ')
             for line in command.splitlines():
