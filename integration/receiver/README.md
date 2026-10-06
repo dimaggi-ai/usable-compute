@@ -219,9 +219,13 @@ before domain evaluation. The byte limit does not bound total Python process
 memory or domain evaluation cost. Large journal exports still require a separate
 bounded transport design; this change does not add pagination or truncate them.
 
-The installed-receiver GitHub workflow is configured to build on macOS and both
-Linux architectures, export the same eight pinned source commits, verify their
-file hashes and run source-bound tests. The JUnit gate allows exactly the named
+The installed-receiver workflow builds and tests on Linux x86_64, Linux aarch64 and
+macOS arm64. Each job exports the same eight pinned source commits and verifies
+their file hashes. Both Linux jobs run the receiver tests except the four cross-repository roundtrip
+test files excluded in the workflow. macOS also excludes the
+Linux-specific current-evidence reader and lifecycle tests listed in the workflow.
+The macOS result covers only those selected tests. Linux reader behavior requires
+the Linux checks. The JUnit gate allows exactly the named
 strict simulator xfail while its old commit remains pinned; every other skip
 refuses. Pytest defaults to strict xfail; the report hook also turns explicitly
 non-strict XPASS into a failing exit. The gate requires the hook's policy marker,
@@ -234,8 +238,9 @@ The gate also requires the complete JUnit case set to equal the committed
 `tools/receiver_tests.json` manifest: every expected identity exactly once, with
 no extras. Suite counters for tests, skips, failures and errors must match the
 actual cases. The evidence workflow gates all root `tools` tests, including RSI,
-against `tools/tools_tests.json` with no allowed exceptions. Both manifests are
-produced by `pytest --collect-only` over the workflow selections. After an intended
+against `tools/tools_tests.json` with no allowed exceptions. The macOS selection
+uses `tools/receiver-darwin_tests.json` as its manifest. All three manifests are
+produced by `pytest --collect-only` using the test paths in their workflow jobs. After an intended
 test-selection change, run `python integration/receiver/tools/ci_test_manifest.py`
 from the repository root with the source bundle configured. Use `--check` to
 verify without writing; staleness tests also compare current collection to each
