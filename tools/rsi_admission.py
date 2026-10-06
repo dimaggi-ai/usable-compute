@@ -7,7 +7,7 @@ v1 consumption requires admission and an owner-provisioned persistent replay sto
 import hashlib
 import json
 import re
-from rsi_records import load, REPOSITORIES
+from rsi_records import load, MAX_BYTES, REPOSITORIES
 
 
 def encode(value):
@@ -214,7 +214,16 @@ def consume_supplied_batch(manifest_bytes, payload_bytes, trusted_profile, admis
     """
     fresh = admit_supplied_batch(manifest_bytes, payload_bytes, trusted_profile)
     check(fresh["admission"] == "accepted_static", "consumer_admission_refused")
-    check(type(admission_bytes) is bytes and same(load(admission_bytes), fresh), "consumer_result_mismatch")
+    # An accepted receipt has two batch checks plus three checks for each row:
+    # up to 770 checks for 256 admitted rows. Only this top-level array may use
+    # that derived bound; all supplied input arrays retain their 256-entry cap.
+    # Each row ID also repeats in three checks. Size the receipt-only byte budget
+    # from our fresh result so any emitted canonical receipt can round-trip.
+    receipt_bytes = max(MAX_BYTES, len(encode(fresh)))
+    check(type(admission_bytes) is bytes and same(
+        load(admission_bytes, root_array_limits={"checks": len(fresh["checks"])},
+             max_bytes=receipt_bytes), fresh),
+        "consumer_result_mismatch")
     check(replay_store is None, 'caller_replay_store_refused')
     claim_designated([(manifest_bytes, payload_bytes)])
     return load(payload_bytes)["rows"]
