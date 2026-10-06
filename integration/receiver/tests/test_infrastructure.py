@@ -272,7 +272,7 @@ def test_expiry_drift_and_no_auto_activation():
 def test_cpu_binding_scope_and_expiry():
     r, q = fixture.fixtures()
     p = run(r, q)
-    b = cpu_binding(r, q, digest(r), p, NOW)
+    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid', tenant='synthetic-tenant')
     assert b["valid_until"] == "2026-09-20T12:05:00Z"
     assert b["cpu_millicores"] == 500 and b["permission"] == "not_granted"
     with pytest.raises(ValueError):
@@ -344,7 +344,7 @@ def test_stale_shared_budget_refuses_and_limits_binding_expiry():
     assert run(r, q)["status"] == "refused"
     q["budgets"][0]["observed_at"] = "2026-09-20T11:59:00Z"
     p = run(r, q)
-    b = cpu_binding(r, q, digest(r), p, NOW)
+    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid', tenant='synthetic-tenant')
     assert b["valid_until"] == "2026-09-20T12:04:00Z"
 
 
@@ -393,7 +393,7 @@ def test_installed_cli_exact_example_commands(tmp_path):
         ),
         (
             "infrastructure-cpu-binding",
-            common + ["--plan", str(tmp_path / "plan.json")],
+            common + ["--plan", str(tmp_path / "plan.json"), "--watch-store", str(tmp_path / "watch.db"), "--expiry-ledger", str(tmp_path / "reader.ledger"), "--tenant", "synthetic-tenant", "--node-uid", "host-uid"],
             "permission",
             "not_granted",
         ),
@@ -413,15 +413,43 @@ def test_installed_cli_exact_example_commands(tmp_path):
             [],
         ),
     ]
+    from dimaggi_receiver.topology_watch import WatchStore, initialize_expiry_ledger
+    initialize_expiry_ledger(tmp_path / "reader.ledger")
+    store = WatchStore(tmp_path / 'watch.db', 'synthetic-tenant', 'synthetic-cluster', 'nodes')
+    t = fixture.topology_fixture()
+    store.relist({'apiVersion':'v1', 'kind':'NodeList', 'metadata':{'resourceVersion':'12'},
+                  'items':list(t['records'].values())}, t['observed_at'], t['expires_at'])
+    # Freeze the subprocess too: these are historical fixture timestamps.
+    runner = """
+from unittest.mock import patch
+from types import SimpleNamespace
+import os
+from dimaggi_receiver.observations import _utc
+from dimaggi_receiver.cli import main
+stamp = _utc('2026-09-20T12:00:01Z').timestamp()
+patch('time.time', return_value=stamp).start()
+real_fstat = os.fstat
+snapshot = os.stat(SNAPSHOT_PATH)
+def kernel_stat(fd):
+    info = real_fstat(fd)
+    if (info.st_dev, info.st_ino) != (snapshot.st_dev, snapshot.st_ino):
+        return info
+    fields = {k: getattr(info, k) for k in dir(info) if k.startswith('st_')}
+    fields['st_ctime'] = stamp
+    return SimpleNamespace(**fields)
+os.fstat = kernel_stat
+raise SystemExit(main())
+""".replace('SNAPSHOT_PATH', repr(str(tmp_path/'watch.db')))
     for cmd, args, key, expected in commands:
         result = subprocess.run(
-            [sys.executable, "-m", "dimaggi_receiver.cli", cmd, *args],
+            [sys.executable, "-c", runner, cmd, *args],
             capture_output=True,
             text=True,
             timeout=10,
         )
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)[key] == expected
+    store.close()
     (tmp_path / "request.json").write_text('{"schema":"a","schema":"b"}')
     result = subprocess.run(
         [sys.executable, "-m", "dimaggi_receiver.cli", "infrastructure-plan", *common],
@@ -510,3 +538,16 @@ def test_unknown_metrics_are_not_zero_or_false_slo_proof():
     assert {"power_watts", "max_latency_p99_us", "max_restore_seconds"} <= set(
         result["allocations"][0]["unchecked_constraints"]
     )
+
+
+def test_example_generator_is_deterministic_without_pytest_clock(tmp_path):
+    import subprocess
+    import sys
+
+    source = Path(fixture.__file__)
+    script = tmp_path/source.name
+    script.write_bytes(source.read_bytes())
+    for _ in range(2):
+        subprocess.run([sys.executable, str(script)], check=True, timeout=10)
+        for expected in source.parent.glob('*.json'):
+            assert (tmp_path/expected.name).read_bytes() == expected.read_bytes()

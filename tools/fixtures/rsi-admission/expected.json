@@ -1,0 +1,8 @@
+{
+  "independent_hand_calculation": "10 = 7 + 3; each term >= 0; each unit count",
+  "seed": 34,
+  "evidence_class": "synthetic",
+  "scope": "illustrative exact resource counts only",
+  "expected_admission": "accepted_static",
+  "expected_assessment": "synthetic_only"
+}

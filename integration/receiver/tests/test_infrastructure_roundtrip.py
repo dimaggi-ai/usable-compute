@@ -29,7 +29,7 @@ def test_installed_python_to_go_binding(tmp_path):
         "evidence_class"
     ] = q["budgets"][0]["evidence_class"] = "local_lab"
     p = plan(r, q, digest(r), now)
-    b = cpu_binding(r, q, digest(r), p, now)
+    b = cpu_binding(r, q, digest(r), p, now, topology=fixture.topology_fixture(now), node_uid='host-uid', tenant='synthetic-tenant')
     data = dumps(b).encode()
     path = tmp_path / "binding.json"
     path.write_bytes(data)

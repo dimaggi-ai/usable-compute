@@ -39,10 +39,11 @@ flowchart LR
 
 ## Reproduce locally
 
-Install the receiver from the repository root:
+Build and hash-check the receiver from the repository root. Choose the committed lock for the target platform; this example uses Linux x86_64 and Python 3.12:
 
 ```sh
-python -m pip install ./integration/receiver
+export RUNNER_TEMP="$(mktemp -d)"
+bash integration/receiver/tools/qualify_offline.sh integration/receiver/requirements-linux-x86_64-py312.lock
 python integration/receiver/examples/infrastructure/generate.py
 ```
 
@@ -60,14 +61,14 @@ subprocess.run(['dimaggi-receiver', 'infrastructure-plan', *common], check=True)
 subprocess.run(['dimaggi-receiver', 'infrastructure-reconcile', *common,
                 '--plan', str(root / 'plan.json'), '--observations', str(root / 'observations.json'),
                 '--expected-objects', str(root / 'expected_objects.json')], check=True)
-subprocess.run(['dimaggi-receiver', 'infrastructure-cpu-binding', *common,
-                '--plan', str(root / 'plan.json')], check=True)
+binding = json.loads((root / 'cpu_binding.json').read_text())
+print(json.dumps(binding, sort_keys=True))
 PY
 ```
 
 `infrastructure-drift` accepts `--registry`, `--registry-digest`, `--candidate` and `--candidate-digest`. Pins identify canonical JSON (`dimaggi_receiver.jsonio.digest`), not pretty-printed file bytes. TENWA's CPU binding pin instead hashes **exact file bytes**, matching its existing signed evidence convention. These two digest domains must not be substituted.
 
-For real CPU use, the deployment owner authenticates the observations, validates the profile against that deployment, and approves the existing prerequisites. Put the exact CPU-binding JSON text in `Deployment.InfrastructureEvidence` and its byte SHA-256 in `Deployment.InfrastructureEvidenceDigest`. TENWA includes both in `ConfigurationDigest`; obtain a fresh matching grant. Its existing `HeadroomApproved`, image, namespace and isolation prerequisites remain mandatory. Omitting both fields retains the legacy CPU contract and is **not** an infrastructure-aware execution claim. Removing them from an approved infrastructure-bound configuration invalidates the grant.
+For real CPU use, the deployment owner authenticates the observations, validates the profile against that deployment, and approves the existing prerequisites. Put the exact CPU-binding JSON text in `Deployment.InfrastructureEvidence` and its byte SHA-256 in `Deployment.InfrastructureEvidenceDigest`. TENWA includes both in `ConfigurationDigest`; obtain a fresh matching grant. Its existing `HeadroomApproved`, image, namespace and isolation prerequisites remain mandatory. Binding-v2 is required by the shared execution contract; the executor must refuse missing evidence. Removing evidence from an approved configuration invalidates its grant. Receiver tests alone do not qualify that executor enforcement.
 
 The offline `batch-job-plan` also accepts `--infrastructure-binding FILE --infrastructure-digest SHA256 --as-of UTC`. This check creates no authority. A synthetic example should refuse there. The cross-repository acceptance test supplies explicitly mocked lab evidence to exercise the positive contract, followed by expiry, altered request, changed resource, wrong pin and synthetic-evidence refusals.
 
@@ -103,3 +104,19 @@ python integration/receiver/tools/verify_interoperability.py \
 ```
 
 The command verifies installed package bytes against this checkout, verifies the source export, compiles the five native boundary tools, runs Go race/vet and all receiver tests, refuses skipped acceptance tests, and records logs, timing and artifact hashes. Go network dependency fetching is disabled during verification. Failures retain their logs and stop the sequence; they do not produce a success claim. The public receiver CI runs the installed package and excludes four private TENWA subprocess suites; this local command supplies all four interfaces.
+
+CPU bindings use `dimaggi-infrastructure-cpu-binding/v2`. Supply `--watch-store`,
+`--expiry-ledger`, `--tenant` and `--node-uid` to `infrastructure-cpu-binding`. The store must be the
+operator-configured durable Node collector that supplied the placement inventory.
+The command reads it read-only without taking collector ownership. Provision and
+retain a separate reader-owned ledger as described in TOPOLOGY-COLLECTION.md. It refuses expired or
+resync-required state or an expired collector lease, and includes the paired Node name
+and UID, inventory digest, collector
+session and resource version. Validity ends at the earliest profile, headroom,
+budget, inventory or 300-second deadline. Python callers supply that current
+reader receipt as `topology=`, the selected `node_uid=`, and explicit `tenant=`.
+The producer re-reads that receipt's WatchStore; saved exports and caller-created
+dictionaries refuse. `inventory_expires_at` is capped at observation time plus
+300 seconds. All timestamps use ASCII UTC Z with up to six fractional digits.
+Node identity emission does not establish required executor node affinity or
+eliminate topology drift after the read. The deployment owner authenticates the collector and evidence.

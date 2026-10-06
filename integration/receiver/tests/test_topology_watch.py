@@ -51,18 +51,18 @@ def test_atomic_batch_and_restart(tmp_path):
     s.close()
 
 def test_new_owner_invalidates_old_stream(store):
-    path=store.db.execute('PRAGMA database_list').fetchone()[2]
+    path=store.path
     other=WatchStore(path,'tenant','cluster','nodes')
     try:
         other.relist(listing(),T,E)
         with pytest.raises(ObservationError):store.apply([event()],T,E)
-        assert 'resync_required' in other.snapshot(T)['issues']
+        assert other.snapshot(T)['issues'] == []
     finally:other.close()
 
 def test_partial_list_scope_and_staleness(store):
     bad=listing();bad['metadata']['continue']='more'
     with pytest.raises(ObservationError):store.relist(bad,T,E)
-    assert store.snapshot(E)['issues']==['stale_or_future']
+    assert store.snapshot(E)['issues']==['resync_required', 'stale_or_future']
     bad=listing();bad['items'][0]['metadata']['namespace']='foreign'
     with pytest.raises(ObservationError):store.relist(bad,T,E)
 
@@ -107,7 +107,7 @@ s.execute("UPDATE projection SET body='uncommitted-corruption'")
 Path(sys.argv[2]).write_text('ready')
 time.sleep(60)
 '''
-    proc=subprocess.Popen([sys.executable,'-c',code,str(path),str(marker)])
+    proc=subprocess.Popen([sys.executable,'-c',code,str(s.writer_path),str(marker)])
     try:
         deadline=time.monotonic()+5
         while not marker.exists() and time.monotonic()<deadline:time.sleep(.01)

@@ -34,9 +34,38 @@ uncertainty remains explicit; it is not a statistical confidence interval.
 
 Journal files use descriptor-owned byte-range locks on Darwin and qualified LP64
 Linux ABIs. Tests check competing processes, hard-link aliases, unrelated descriptor
-closure, writer death and committed-state recovery. Actual Linux arm64 container
-checks are distinct from native Darwin arm64 checks. Linux x86_64 uses the documented
-ABI but has not been exercised by this candidate. No power-cut/filesystem or live
+closure, writer death and committed-state recovery. The managed Linux x86_64 interpreter exercises the fallback ABI. Native Linux
+arm64 and Darwin qualification remain separate, unverified platform obligations. No power-cut/filesystem or live
 cluster acceptance follows from process-kill tests.
 
 Engineering checks do not replace independent acceptance or authorize deployment.
+
+`reconcile_allocations(raw_inputs)` checks one meter and exact `[start_s,end_s)`
+window, including every tenant and retry. The caller must serialize persistent
+inserts and submit the complete group. Window labels do not separate claims on the
+same physical interval. Repeated attempt IDs are refused for that meter and exact
+interval regardless of tenant or window labels. Non-exact intervals, including
+overlapping aliases, refuse. Distinct retry attempt IDs remain subject to the same
+fraction total. Meter samples, scope and whole-meter cost intervals must
+agree. Fractions use exact Decimal addition with zero tolerance: a sum above one
+is refused. Each allocation receives the same fraction of energy and cost.
+The result contains `allocations`, `allocated_fraction`, `unattributed_fraction`,
+`unattributed_energy_j` and `unattributed_cost_usd`. Missing measurements remain
+null. A single `outcome_metrics` call cannot establish complete group coverage.
+Cost intervals describe the whole meter; cost without an energy allocation stays
+unknown with `cost_allocation_missing`. Decimal measurement inputs are limited to 64 decimal
+digits and adjusted exponents from -100 through 100. Calculations use a private
+512-digit context; ratios may round at that precision.
+
+A power budget verdict of `within` requires measured intervals no longer than one
+second. It describes the declared piecewise-constant interval model, not an
+independent instantaneous-peak measurement. Longer intervals and modelled energy
+leave the verdict unknown; a measured average above the budget still proves an
+exceedance. `power_budget_basis` states this resolution rule. Counter-only energy
+cannot establish peak power. Unknown verdicts retain `power_peak_unqualified`.
+
+Map preempted attempts to `failed`; retries retain distinct attempt IDs and all
+failed and idle energy/cost. Consumers must retain the returned `issues` and exact
+decimal strings. The receiver does not implement the application's ledger review
+or SQLite storage. Training quality targets and observations may be signed finite
+values; resource, time, energy and cost inputs remain nonnegative.

@@ -201,3 +201,24 @@ PYTHONPATH=integration/receiver/src python -m pytest -q integration/receiver/tes
 
 These product observations/cases are not RSI work. No candidate execution or
 read-only digest improvement claim is produced here.
+
+Journal events carry a SHA-256 body digest and a chained row digest covering
+all stored event columns. Intents, source registrations, conflicts,
+reconciliations, triage and resolutions have a second chain that covers every
+stored column and row. Decision reads verify these chains before using the data.
+`ObservationStore.chain_head()` returns event and decision counts and a combined
+SHA-256 head. Retain that object outside the journal and pass it as `expected=`
+to `chain_head` before using a checkpointed journal.
+
+Migration cannot authenticate old rows. Legacy event history remains labelled
+`unverified-legacy`; legacy decision tables without their chain require a new
+journal populated from separately retained evidence. Projections refuse those
+unverified records.
+
+Without an external anchor, verification detects partial edits and deletions
+that disagree with the retained chain. It cannot detect tail truncation accompanied
+by a rollback of the stored count and head, or a complete rewrite of data and
+chains. The external anchor must retain both counts and the combined head under
+owner control. Verification scans the journal on each read or append; large
+journals need performance qualification. These hashes do not authenticate
+collectors, prove observations true, or establish power-loss durability.
