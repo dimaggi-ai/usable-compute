@@ -88,7 +88,8 @@ def test_malformed_or_tampered_receipt_does_not_claim_rows(mutation, replay):
         raw = raw[:-1] + b',"extra":NaN}'
     elif mutation == 'oversize':
         raw += b' ' * records.MAX_BYTES
-    with pytest.raises(ValueError):
+    reason = '256 entries' if mutation in {'nested_array', 'other_array'} else None
+    with pytest.raises(ValueError, match=reason):
         admission.consume_supplied_batch(*args, raw)
     assert len(admission.consume_supplied_batch(*args, enc(original))) == 85
 
