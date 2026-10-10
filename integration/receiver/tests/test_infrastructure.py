@@ -272,11 +272,16 @@ def test_expiry_drift_and_no_auto_activation():
 def test_cpu_binding_scope_and_expiry():
     r, q = fixture.fixtures()
     p = run(r, q)
-    b = cpu_binding(r, q, digest(r), p, NOW, topology=fixture.topology_fixture(), node_uid='host-uid', tenant='synthetic-tenant')
+    topology = fixture.topology_fixture()
+    binding_args = dict(topology=topology, node_uid='host-uid', tenant='synthetic-tenant')
+    b = cpu_binding(r, q, digest(r), p, NOW, **binding_args)
     assert b["valid_until"] == "2026-09-20T12:05:00Z"
     assert b["cpu_millicores"] == 500 and b["permission"] == "not_granted"
-    with pytest.raises(ValueError):
-        cpu_binding(r, q, digest(r), p, "2026-09-20T12:00:02Z")
+    later = "2026-09-20T12:00:02Z"
+    current_plan = plan(r, q, digest(r), later)
+    assert cpu_binding(r, q, digest(r), current_plan, later, **binding_args)
+    with pytest.raises(ValueError, match='^a current reproducible compatible plan is required$'):
+        cpu_binding(r, q, digest(r), p, later, **binding_args)
 
 
 def test_seeded_capacity_monotonicity_and_conservation():
