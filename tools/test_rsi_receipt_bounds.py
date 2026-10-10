@@ -9,13 +9,14 @@ import rsi_records as records
 from test_rsi_admission import bind, bind_plan, enc, fixture
 
 
-def batch(count, row_id_length=0):
+def batch(count, row_id_length=0, long_id_count=None):
     manifest, payload, trust = fixture()
     template = payload['rows'][0]
     payload['rows'] = []
     for index in range(count):
         row = copy.deepcopy(template)
-        row.update(row_id=f'row-{index}'.ljust(row_id_length, 'x'),
+        length = row_id_length if long_id_count is None or index < long_id_count else 0
+        row.update(row_id=f'row-{index}'.ljust(length, 'x'),
                    source_id=f'source-{index}', group=f'group-{index}')
         payload['rows'].append(row)
     trust['partition_plan']['partitions'][0]['members'] = [
@@ -63,12 +64,44 @@ def test_long_row_ids_round_trip_with_receipt_only_byte_budget(count, row_id_len
     raw = enc(receipt)
     assert len(raw) > records.MAX_BYTES
     with pytest.raises(ValueError, match='byte limit'):
-        admission.consume_supplied_batch(*args, raw + b' ')
+        admission.consume_supplied_batch(*args, raw + b' ' * (2 * len(raw)))
     assert len(admission.consume_supplied_batch(*args, raw)) == count
 
 
+@pytest.mark.parametrize('formatting', [{"separators": (',', ':')}, {}, {"indent": 2}],
+                         ids=['compact', 'default', 'indented'])
+@pytest.mark.parametrize('count,long_id_count', [(85, 85), (256, 80)])
+def test_long_id_receipt_formatting_and_content_budget(count, long_id_count, formatting, replay):
+    # Keep the admission inputs under the generic byte cap at either row count.
+    args = batch(count, 2048, long_id_count)
+    assert all(len(raw) <= records.MAX_BYTES for raw in args)
+    original = admission.admit_supplied_batch(*args)
+    assert original['admission'] == 'accepted_static'
+    assert len(enc(original)) > records.MAX_BYTES
+    oversized = dict(original, extra='')
+    with pytest.raises(ValueError, match='record exceeds byte limit'):
+        admission.consume_supplied_batch(*args, json.dumps(oversized, **formatting).encode())
+    raw = json.dumps(original, **formatting).encode()
+    assert len(admission.consume_supplied_batch(*args, raw)) == count
+    with pytest.raises(ValueError, match='cross_call_replay'):
+        admission.consume_supplied_batch(*args, raw)
+
+
+@pytest.mark.parametrize('formatting', [{"separators": (',', ':')}, {}, {"indent": 2}],
+                         ids=['compact', 'default', 'indented'])
+def test_all_long_ids_at_max_rows_keep_generic_input_byte_cap(formatting, replay):
+    args = batch(256, 2048)
+    assert all(len(raw) > records.MAX_BYTES for raw in args)
+    receipt = admission.admit_supplied_batch(*args)
+    assert receipt['admission'] == 'rejected'
+    assert receipt['checks'][-1]['detail'] == 'record exceeds byte limit'
+    with pytest.raises(ValueError, match='consumer_admission_refused'):
+        admission.consume_supplied_batch(*args, json.dumps(receipt, **formatting).encode())
+
+
 @pytest.mark.parametrize('mutation', ['extra_check', 'nested_array', 'other_array',
-                                     'changed_check', 'duplicate_key', 'nonfinite', 'oversize'])
+                                     'nested_key_array', 'changed_check', 'duplicate_key',
+                                     'nonfinite', 'oversize'])
 def test_malformed_or_tampered_receipt_does_not_claim_rows(mutation, replay):
     args = batch(85)
     original = admission.admit_supplied_batch(*args)
@@ -79,6 +112,8 @@ def test_malformed_or_tampered_receipt_does_not_claim_rows(mutation, replay):
         receipt['checks'][0]['checks'] = [0] * 257
     elif mutation == 'other_array':
         receipt['failing_row_ids'] = ['row'] * 257
+    elif mutation == 'nested_key_array':
+        receipt['extra'] = {'checks': [0] * 257}
     elif mutation == 'changed_check':
         receipt['checks'][-1]['status'] = 'failed'
     raw = enc(receipt)
@@ -88,7 +123,7 @@ def test_malformed_or_tampered_receipt_does_not_claim_rows(mutation, replay):
         raw = raw[:-1] + b',"extra":NaN}'
     elif mutation == 'oversize':
         raw += b' ' * records.MAX_BYTES
-    reason = '256 entries' if mutation in {'nested_array', 'other_array'} else None
+    reason = '256 entries' if mutation in {'nested_array', 'other_array', 'nested_key_array'} else None
     with pytest.raises(ValueError, match=reason):
         admission.consume_supplied_batch(*args, raw)
     assert len(admission.consume_supplied_batch(*args, enc(original))) == 85

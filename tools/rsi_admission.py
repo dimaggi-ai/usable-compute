@@ -218,12 +218,16 @@ def consume_supplied_batch(manifest_bytes, payload_bytes, trusted_profile, admis
     # up to 770 checks for 256 admitted rows. Only this top-level array may use
     # that derived bound; all supplied input arrays retain their 256-entry cap.
     # Each row ID also repeats in three checks. Size the receipt-only byte budget
-    # from our fresh result so any emitted canonical receipt can round-trip.
-    receipt_bytes = max(MAX_BYTES, len(encode(fresh)))
-    check(type(admission_bytes) is bytes and same(
-        load(admission_bytes, root_array_limits={"checks": len(fresh["checks"])},
-             max_bytes=receipt_bytes), fresh),
-        "consumer_result_mismatch")
+    # from our fresh result. Bound raw parsing separately so JSON whitespace
+    # does not count toward the canonical content budget.
+    fresh_bytes = encode(fresh)
+    receipt_bytes = max(MAX_BYTES, len(fresh_bytes))
+    check(type(admission_bytes) is bytes, "consumer_result_mismatch")
+    supplied = load(admission_bytes, root_array_limits={"checks": len(fresh["checks"])},
+                    max_bytes=max(MAX_BYTES, 2 * len(fresh_bytes)))
+    supplied_bytes = encode(supplied)
+    check(len(supplied_bytes) <= receipt_bytes, "record exceeds byte limit")
+    check(supplied_bytes == fresh_bytes, "consumer_result_mismatch")
     check(replay_store is None, 'caller_replay_store_refused')
     claim_designated([(manifest_bytes, payload_bytes)])
     return load(payload_bytes)["rows"]
