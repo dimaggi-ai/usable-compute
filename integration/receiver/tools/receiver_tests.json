@@ -943,6 +943,7 @@
   "tests/test_reader_lock_order.py::test_renewal_during_ledger_wait_does_not_tombstone[45.1]",
   "tests/test_reader_lock_order.py::test_renewal_during_ledger_wait_does_not_tombstone[47.1]",
   "tests/test_reader_platform.py::test_darwin_reader_refuses_kernel_publication_evidence",
+  "tests/test_reader_platform.py::test_infrastructure_example_documents_linux_requirement",
   "tests/test_reader_renewal.py::test_collector_two_seconds_behind_can_renew_in_refusal_band[45]",
   "tests/test_reader_renewal.py::test_collector_two_seconds_behind_can_renew_in_refusal_band[46.999999]",
   "tests/test_reader_renewal.py::test_exact_representable_band_edges[-1-45]",

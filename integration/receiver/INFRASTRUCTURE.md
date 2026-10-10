@@ -39,7 +39,7 @@ flowchart LR
 
 ## Reproduce locally
 
-Build and hash-check the receiver from the repository root. Choose the committed lock for the target platform; this example uses Linux x86_64 and Python 3.12:
+Generating the infrastructure examples requires Linux because the CPU binding reads kernel publication evidence. The generator cannot run on macOS. Build and hash-check the receiver from the repository root with the committed Linux lock for your architecture. This example uses Linux x86_64 and Python 3.12:
 
 ```sh
 export RUNNER_TEMP="$(mktemp -d)"

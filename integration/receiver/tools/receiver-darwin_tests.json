@@ -621,6 +621,7 @@
   "tests/test_quantities.py::test_uncertain_or_inexact_quantities_refuse[NaN-B-bytes]",
   "tests/test_quantities.py::test_uncertain_or_inexact_quantities_refuse[True-B-bytes]",
   "tests/test_reader_platform.py::test_darwin_reader_refuses_kernel_publication_evidence",
+  "tests/test_reader_platform.py::test_infrastructure_example_documents_linux_requirement",
   "tests/test_receiver.py::test_64_chip_memory_negative_is_incomparable",
   "tests/test_receiver.py::test_actual_fragmentation_and_bandwidth_no_benefit",
   "tests/test_receiver.py::test_exact_resource_result_survives_rounding_and_bytes",
