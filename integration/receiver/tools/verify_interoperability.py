@@ -15,6 +15,7 @@ import sys
 import time
 import tomllib
 import xml.etree.ElementTree as ET
+from dimaggi_receiver.atomic import atomic_write
 
 
 def verify_installed(receiver):
@@ -164,7 +165,7 @@ def main():
                 if p.is_file()
             },
         )
-        (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        atomic_write(output / "manifest.json", (json.dumps(manifest, indent=2) + "\n").encode())
     print(str(output / "manifest.json"))
 
 

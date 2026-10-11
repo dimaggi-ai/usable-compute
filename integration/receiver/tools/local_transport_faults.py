@@ -21,6 +21,11 @@ import threading
 from urllib.parse import urlsplit
 from dimaggi_receiver.infrastructure import plan, cpu_binding
 from dimaggi_receiver.jsonio import loads, read_file, dumps, digest
+from dimaggi_receiver.atomic import atomic_write
+
+
+def save(path, value):
+    atomic_write(path, dumps(value).encode())
 
 
 def run(a):
@@ -61,10 +66,6 @@ def run(a):
         return subprocess.run(
             list(map(str, argv)), capture_output=True, timeout=timeout
         )
-
-    def save(path, value):
-        path.write_text(dumps(value))
-        path.chmod(0o600)
 
     records = []
     for mode in (

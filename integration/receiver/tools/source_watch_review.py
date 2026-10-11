@@ -14,6 +14,7 @@ from pathlib import Path
 from dimaggi_receiver.jsonio import digest, dumps, loads, read_file
 from dimaggi_receiver.source_watch import check_queue, check_snapshot
 from dimaggi_receiver.infrastructure import text
+from dimaggi_receiver.atomic import atomic_write
 
 
 def review(history, expected_queue_digest, finding_ids, evidence, reviewer):
@@ -57,8 +58,8 @@ def review(history, expected_queue_digest, finding_ids, evidence, reviewer):
                 raw = read_file(latest / "sources" / name)
                 if hashlib.sha256(raw).hexdigest() != name:
                     raise ValueError("reviewed source bytes changed")
-                (output / "sources" / name).write_bytes(raw)
-        (output / "review-evidence.txt").write_bytes(evidence)
+                atomic_write(output / "sources" / name, raw)
+        atomic_write(output / "review-evidence.txt", evidence)
         receipt = dict(
             schema="dimaggi-source-review/v1",
             reviewer=reviewer,
@@ -72,9 +73,9 @@ def review(history, expected_queue_digest, finding_ids, evidence, reviewer):
             activation_authorized=False,
             execution_authorized=False,
         )
-        (output / "snapshot.json").write_text(dumps(snapshot))
-        (output / "queue.json").write_text(dumps(updated))
-        (output / "report.json").write_text(dumps(receipt))
+        atomic_write(output / "snapshot.json", dumps(snapshot).encode())
+        atomic_write(output / "queue.json", dumps(updated).encode())
+        atomic_write(output / "report.json", dumps(receipt).encode())
         return dict(
             run=str(output), pending_reviews=len(updated["findings"]), review=receipt
         )
