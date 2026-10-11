@@ -3,25 +3,27 @@
 No serving-token proxy. Meter and cost boundaries reuse outcome accounting;
 all work through the first target observation must be included in that window.
 """
-from .outcome_metrics import outcome_metrics, number
+from .outcome_metrics import outcome_metrics, number, decimal_contract
 from .topology import need
 from .observations import _digest
 
 
+@decimal_contract
 def training_metrics(window, progress):
+    need(type(window) is dict, 'training window contract required')
     need(type(progress) is dict and set(progress)=={'schema','criterion_digest','direction','target','observations'},'training progress contract required')
     need(progress['schema']=='dimaggi-training-progress/v1','unsupported training contract')
     pin=progress['criterion_digest']
     need(type(pin) is str and pin.startswith('sha256:') and len(pin)==71,'frozen quality criterion digest required')
     need(progress['direction'] in ('at_least','at_most'),'unknown quality direction')
-    target=number(progress['target'],'target')
+    target=number(progress['target'],'target',signed=True)
     observations=progress['observations']
     need(type(observations) is list and 1<=len(observations)<=10000,'bounded progress observations required')
     start=number(window['start_s'],'start');end=number(window['end_s'],'end')
     previous=None;reached=None
     for row in observations:
         need(type(row) is dict and set(row)=={'time_s','quality','evaluator_digest'},'quality observation required')
-        t=number(row['time_s'],'quality time');q=number(row['quality'],'quality')
+        t=number(row['time_s'],'quality time');q=number(row['quality'],'quality',signed=True)
         need(start<=t<=end and (previous is None or t>previous),'quality observations must be ordered inside measurement window')
         need(row['evaluator_digest']==pin,'quality evaluator changed')
         if reached is None and (q>=target if progress['direction']=='at_least' else q<=target):reached=t

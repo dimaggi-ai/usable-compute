@@ -4,7 +4,8 @@ Inputs are attributed evidence, not verified meter truth. Power samples use the
 stated piecewise-constant interval model; cumulative counters do not prove peak
 power. Failed work and allocated idle costs stay in the whole-window numerator.
 """
-from decimal import Decimal
+from decimal import Decimal, Context, DecimalException, localcontext
+from functools import wraps
 from .observations import _digest, _json, _identifier, ObservationError
 from .topology import need
 
@@ -12,13 +13,25 @@ CONTEXT = {'model','tokenizer','precision','workload','quality_policy','latency_
            'cache_policy','batching','input_length','output_length','allocation_rule'}
 
 
-def number(value, name, *, positive=False):
+def decimal_contract(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        try:
+            with localcontext(Context(prec=512)):
+                return function(*args, **kwargs)
+        except DecimalException as exc:
+            raise ObservationError('metric decimal arithmetic refused') from exc
+    return wrapped
+
+
+def number(value, name, *, positive=False, signed=False):
     need(type(value) in (int,float,str), name + ': numeric value required')
     try:
         result = Decimal(str(value))
     except Exception as exc:
         raise ObservationError(name + ': invalid decimal') from exc
-    need(result.is_finite() and (result > 0 if positive else result >= 0), name + ': invalid bound')
+    need(result.is_finite() and (result > 0 if positive else signed or result >= 0), name + ': invalid bound')
+    need(len(result.as_tuple().digits) <= 64 and abs(result.adjusted()) <= 100, name + ': decimal magnitude or precision exceeded')
     return result
 
 
@@ -27,6 +40,7 @@ def count(value, name):
     return value
 
 
+@decimal_contract
 def outcome_metrics(data):
     need(type(data) is dict and set(data) == {'schema','window_id','tenant','start_s','end_s','context','attempts',
          'energy','cost','power_budget_w'}, 'invalid metric fields')
@@ -58,7 +72,7 @@ def outcome_metrics(data):
         if qualified:
             accepted+=row['tokens']['output']-row['tokens']['discarded']
             successful_tasks+=int(row['successful_task'])
-    issues=[]; joules=None; peak=None; energy_kind='unknown'; energy_scope=None
+    issues=[]; joules=None; peak=None; peak_resolution_ok=False; energy_kind='unknown'; energy_scope=None
     e=data['energy']
     if e is None:
         issues.append('energy_missing')
@@ -85,7 +99,9 @@ def outcome_metrics(data):
                 if a!=cursor or b-a>max_gap:valid=False
                 energy+=(b-a)*w;values.append(w);cursor=b
             if cursor!=end or not samples:valid=False
-            if valid:peak=max(values);joules=energy*fraction
+            if valid:
+                peak=max(values);joules=energy*fraction
+                peak_resolution_ok = all(number(row['end_s'],'sample end')-number(row['start_s'],'sample start') <= 1 for row in samples)
         else:
             previous=None
             for row in samples:
@@ -118,7 +134,8 @@ def outcome_metrics(data):
             if a!=cursor:complete=False
             total+=(b-a)*rate;cursor=b
         if cursor!=end:complete=False
-        if complete:cost=total
+        if complete and e is not None:cost=total*fraction
+        elif complete:issues.append('cost_allocation_missing')
         else:issues.append('cost_incomplete')
     if not accepted:issues.append('accepted_token_denominator_zero')
     if joules==0:issues.append('energy_denominator_zero')
@@ -126,7 +143,11 @@ def outcome_metrics(data):
     def divide(n,d,scale=1):
         return str(Decimal(n)*scale/Decimal(d)) if n is not None and d is not None and d>0 else None
     # Budget compares total meter peak to the stated budget, not allocated average.
-    budget_state='unknown' if peak is None else ('within' if peak<=budget else 'exceeded')
+    budget_state='unknown'
+    if peak is not None and energy_kind == 'measured':
+        if peak > budget: budget_state='exceeded'
+        elif peak_resolution_ok: budget_state='within'
+    if budget_state == 'unknown': issues.append('power_peak_unqualified')
     result={'schema':'dimaggi-outcome-metrics/v1','input_digest':_digest(data),'window_id':data['window_id'],'tenant':data['tenant'],
             'context_digest':_digest(data['context']),'start_s':str(start),'end_s':str(end),'duration_s':str(duration),'accepted_output_tokens':accepted,
             'token_counts':tokens,'outcome_counts':statuses,'successful_tasks':successful_tasks,
@@ -138,7 +159,45 @@ def outcome_metrics(data):
             'usd_per_million_accepted_tokens':divide(cost,accepted,1000000),
             'joules_per_successful_task':divide(joules,successful_tasks),'usd_per_successful_task':divide(cost,successful_tasks),
             'accepted_tokens_per_second':divide(accepted,duration),'average_attributed_watts':divide(joules,duration),
+            'power_budget_basis':'measured_interval_average_at_most_1s',
             'meter_peak_watts':str(peak) if peak is not None else None,'power_budget_watts':str(budget),
             'power_budget_state':budget_state,'throughput_under_power_budget':divide(accepted,duration) if budget_state=='within' else None,
             'issues':issues,'execution_authorized':False}
     return result
+
+
+@decimal_contract
+def reconcile_allocations(raw_inputs):
+    """Reconcile one complete meter/window group, including all tenants and retries."""
+    need(type(raw_inputs) is list and 0 < len(raw_inputs) <= 100000, 'allocation group required')
+    results = [outcome_metrics(row) for row in raw_inputs]
+    first = raw_inputs[0]
+    need(first['energy'] is not None, 'allocation meter required')
+    def meter(row):
+        need(row['energy'] is not None, 'allocation meter required')
+        return {k:v for k,v in row['energy'].items() if k != 'allocation_fraction'}
+    identity = meter(first)
+    window = (number(first['start_s'], 'start'), number(first['end_s'], 'end'))
+    total = Decimal(0)
+    seen = set()
+    attempts = set()
+    for row in raw_inputs:
+        need((number(row['start_s'], 'start'), number(row['end_s'], 'end')) == window,
+             'allocation window mismatch')
+        need(meter(row) == identity and row['cost'] == first['cost'], 'inconsistent allocation meter or cost')
+        key = (row['tenant'], row['window_id'])
+        need(key not in seen, 'duplicate allocation claim'); seen.add(key)
+        for attempt in row['attempts']:
+            key = (identity['meter_id'], window, attempt['id'])
+            need(key not in attempts, 'duplicate attempt allocation'); attempts.add(key)
+        total += number(row['energy']['allocation_fraction'], 'allocation fraction')
+    need(total <= 1, 'meter allocation exceeds one')
+    from copy import deepcopy
+    whole = deepcopy(first); whole['energy']['allocation_fraction'] = '1'
+    measured = outcome_metrics(whole)
+    remainder = Decimal(1) - total
+    return {'meter_id': identity['meter_id'], 'start_s': str(window[0]), 'end_s': str(window[1]),
+            'allocated_fraction': str(total), 'unattributed_fraction': str(remainder),
+            'unattributed_energy_j': str(Decimal(measured['energy_j']) * remainder) if measured['energy_j'] is not None else None,
+            'unattributed_cost_usd': str(Decimal(measured['cost_usd']) * remainder) if measured['cost_usd'] is not None else None,
+            'allocations': results, 'issues': measured['issues'], 'execution_authorized': False}

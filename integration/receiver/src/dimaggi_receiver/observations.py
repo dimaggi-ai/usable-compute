@@ -16,7 +16,7 @@ import sqlite3
 import stat
 import struct
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from urllib.parse import quote
@@ -83,9 +83,9 @@ def ofd_lock_spec():
     if sys.platform == 'darwin':
         return darwin_ofd_command(), struct.pack('@qqihh', 0, 1, 0, fcntl.F_WRLCK, os.SEEK_SET)
     import platform
-    if sys.platform != 'linux' or struct.calcsize('P') != 8 or platform.machine().lower() not in ('aarch64','arm64','x86_64','amd64'):
+    if sys.platform != 'linux' or struct.calcsize('P') != 8 or struct.calcsize('l') != 8 or platform.machine().lower() not in ('aarch64','arm64','x86_64','amd64'):
         raise ObservationError('file journals require qualified Linux or Darwin OFD locking')
-    command = getattr(fcntl, 'F_OFD_SETLK', None)
+    command = getattr(fcntl, 'F_OFD_SETLK', 37)
     if command != 37:
         raise ObservationError('Linux OFD locking constant unavailable or unexpected')
     # Linux asm-generic struct flock on the qualified LP64 ABIs: short type,
@@ -104,11 +104,16 @@ def _identifier(value: Any, field: str) -> str:
 
 def _utc(value: Any) -> datetime:
     if not isinstance(value, str) or not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z", value
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z", value
     ):
         raise ObservationError("timestamps require UTC Z and at most microsecond precision")
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime(
+            int(value[:4]), int(value[5:7]), int(value[8:10]),
+            int(value[11:13]), int(value[14:16]), int(value[17:19]),
+            int(value[20:-1].ljust(6, "0")) if value[19] == "." else 0,
+            tzinfo=timezone.utc,
+        )
     except ValueError as exc:
         raise ObservationError("invalid UTC timestamp") from exc
 
@@ -188,6 +193,11 @@ class ObservationStore:
                 self.db = sqlite3.connect("file:" + quote(str(Path(name).absolute()), safe="/") + "?mode=rw", uri=True)
             else:
                 self.db = sqlite3.connect(name)
+            self.db.create_function('decision_hash', 4, lambda table, key, body, previous: _digest([table, key, json.loads(body), previous]))
+            self.db.execute('PRAGMA synchronous=FULL')
+            if sys.platform == 'darwin':
+                self.db.execute('PRAGMA fullfsync=ON')
+                self.db.execute('PRAGMA checkpoint_fullfsync=ON')
             if self._lock_fd is not None:
                 locked, opened = os.fstat(self._lock_fd), os.stat(name)
                 if (locked.st_dev, locked.st_ino) != (opened.st_dev, opened.st_ino):
@@ -209,6 +219,7 @@ class ObservationStore:
             raise
 
     def _initialize(self) -> None:
+        had_integrity = self.db.execute("SELECT 1 FROM sqlite_master WHERE name='event_integrity'").fetchone() is not None
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript("""
@@ -243,7 +254,117 @@ class ObservationStore:
                 self.db.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_no_{operation.lower()}
                     BEFORE {operation} ON {table}
                     BEGIN SELECT RAISE(ABORT, 'append-only journal'); END""")
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS event_integrity (
+                position INTEGER PRIMARY KEY, body_sha256 TEXT, previous_sha256 TEXT,
+                row_sha256 TEXT, status TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS chain_state (
+                id INTEGER PRIMARY KEY CHECK(id=1), count INTEGER NOT NULL, head TEXT NOT NULL);
+        """)
+        if not self.db.execute('SELECT 1 FROM chain_state').fetchone():
+            if had_integrity:
+                raise ObservationError('journal integrity state missing')
+            rows = self.db.execute('SELECT position FROM events ORDER BY position').fetchall()
+            self.db.executemany("INSERT INTO event_integrity VALUES (?,NULL,NULL,NULL,'unverified-legacy')",
+                                [(row[0],) for row in rows])
+            self.db.execute('INSERT INTO chain_state VALUES(1,?,?)', (len(rows), '0'*64))
+        self._initialize_decisions()
         self.db.commit()
+
+    _DECISIONS = ('intents', 'sources', 'conflicts', 'reconciliations', 'triage', 'resolutions')
+
+    def _initialize_decisions(self):
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS decision_integrity (
+                position INTEGER PRIMARY KEY, table_name TEXT NOT NULL, row_key TEXT NOT NULL,
+                previous_sha256 TEXT NOT NULL, row_sha256 TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS decision_state (
+                id INTEGER PRIMARY KEY CHECK(id=1), count INTEGER NOT NULL, head TEXT NOT NULL);
+        """)
+        if not self.db.execute('SELECT 1 FROM decision_state').fetchone():
+            if self.db.execute('SELECT 1 FROM decision_integrity LIMIT 1').fetchone():
+                raise ObservationError('journal integrity decision state missing')
+            self.db.execute('INSERT INTO decision_state VALUES(1,0,?)', ('0'*64,))
+        for table in self._DECISIONS:
+            columns = [row[1] for row in self.db.execute(f'PRAGMA table_info({table})')]
+            values = ','.join('NEW.' + column for column in columns)
+            self.db.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_integrity_insert
+                AFTER INSERT ON {table} BEGIN
+                INSERT INTO decision_integrity
+                SELECT count+1, '{table}', NEW.{columns[0]}, head,
+                       decision_hash('{table}', NEW.{columns[0]}, json_array({values}), head)
+                FROM decision_state WHERE id=1;
+                UPDATE decision_state SET count=count+1,
+                    head=(SELECT row_sha256 FROM decision_integrity ORDER BY position DESC LIMIT 1)
+                    WHERE id=1;
+                END""")
+
+    def _verify_decisions(self):
+        try:
+            state = self.db.execute('SELECT count,head FROM decision_state WHERE id=1').fetchone()
+            links = self.db.execute('SELECT * FROM decision_integrity ORDER BY position').fetchall()
+            actual = {}
+            for table in self._DECISIONS:
+                for row in self.db.execute(f'SELECT * FROM {table}'):
+                    actual[(table, row[0])] = list(row)
+            if state is None or len(links) != state['count'] or len(actual) != len(links):
+                raise ObservationError('journal integrity decision count mismatch; legacy data requires rebaseline')
+            previous = '0'*64
+            for position, link in enumerate(links, 1):
+                key = (link['table_name'], link['row_key'])
+                values = actual.pop(key, None)
+                expected = _digest([*key, values, previous])
+                if (values is None or link['position'] != position or link['previous_sha256'] != previous
+                        or link['row_sha256'] != expected):
+                    raise ObservationError('journal integrity decision digest mismatch')
+                previous = expected
+            if state['head'] != previous:
+                raise ObservationError('journal integrity decision head mismatch')
+            return {'count': len(links), 'sha256': previous}
+        except sqlite3.Error as exc:
+            raise ObservationError('journal integrity decisions unavailable') from exc
+
+    def _verify_chain(self, *, allow_legacy=False):
+        self._verify_decisions()
+        try:
+            if self.db.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
+                raise ObservationError('journal integrity check failed')
+            rows = self.db.execute('SELECT * FROM events ORDER BY position').fetchall()
+            links = self.db.execute('SELECT * FROM event_integrity ORDER BY position').fetchall()
+            state = self.db.execute('SELECT count,head FROM chain_state WHERE id=1').fetchone()
+            if state is None or len(rows) != state['count'] or len(links) != len(rows):
+                raise ObservationError('journal integrity count mismatch')
+            previous = '0'*64
+            legacy = False
+            for row, link in zip(rows, links):
+                if row['position'] != link['position']:
+                    raise ObservationError('journal integrity order mismatch')
+                if link['status'] == 'unverified-legacy':
+                    legacy = True
+                    continue
+                body_hash = hashlib.sha256(row['body'].encode()).hexdigest()
+                expected = _digest({'row': dict(row), 'previous_sha256': previous})
+                if (link['status'] != 'verified' or link['body_sha256'] != body_hash
+                        or link['previous_sha256'] != previous or link['row_sha256'] != expected):
+                    raise ObservationError('journal integrity digest mismatch')
+                previous = expected
+            if legacy:
+                if not allow_legacy:
+                    raise ObservationError('journal integrity unverified-legacy: rebaseline required')
+            elif state['head'] != previous:
+                raise ObservationError('journal integrity head mismatch')
+            return {'count': len(rows), 'sha256': previous, 'integrity': 'unverified-legacy' if legacy else 'verified'}
+        except sqlite3.Error as exc:
+            raise ObservationError('journal integrity unavailable') from exc
+
+    def chain_head(self, *, expected=None):
+        events = self._verify_chain()
+        decisions = self._verify_decisions()
+        head = dict(events, decision_count=decisions['count'],
+                    sha256=_digest({'events': events, 'decisions': decisions}))
+        if expected is not None and head != expected:
+            raise ObservationError('journal integrity external anchor mismatch')
+        return head
 
     def close(self) -> None:
         try:
@@ -263,6 +384,7 @@ class ObservationStore:
 
     def register_source(self, source_id: str, kind: str, target_id: str) -> bool:
         """Declare a read-source role; registration authenticates no evidence."""
+        self._verify_decisions()
         _identifier(source_id, "source_id")
         _identifier(target_id, "target_id")
         if type(kind) is not str or kind not in KINDS:
@@ -278,6 +400,7 @@ class ObservationStore:
 
     def register_intent(self, intent: dict[str, Any]) -> bool:
         """Persist application intent before importing any attempt/observation."""
+        self._verify_decisions()
         if type(intent) is not dict or set(intent) != INTENT_KEYS:
             raise ObservationError("intent fields must match the declared contract")
         for field in IDENTITIES:
@@ -304,6 +427,7 @@ class ObservationStore:
         return True
 
     def intent(self, request_id: str) -> dict[str, Any]:
+        self._verify_decisions()
         _identifier(request_id, "request_id")
         row = self.db.execute("SELECT body FROM intents WHERE request_id=?", (request_id,)).fetchone()
         if not row:
@@ -311,6 +435,7 @@ class ObservationStore:
         return json.loads(row["body"])
 
     def _conflict(self, event: dict[str, Any], recorded_at: str, reason: str) -> None:
+        self._verify_decisions()
         with self.db:
             self.db.execute("INSERT OR IGNORE INTO conflicts VALUES (?, ?, ?, ?, ?)", (
                 _digest([event, reason]), event["request_id"], recorded_at, reason, _json(event)))
@@ -325,6 +450,7 @@ class ObservationStore:
         """
         if type(event) is not dict or set(event) != EVENT_KEYS:
             raise ObservationError("event fields must match the declared contract")
+        head = self._verify_chain()
         body = _json(event)
         for field in (*IDENTITIES, "event_id", "source_id", "source_epoch", "source_record_id", "source_version"):
             _identifier(event[field], field)
@@ -390,11 +516,17 @@ class ObservationStore:
                 VALUES (?,?,?,?,?,?,?,?,?)""", (
                 event["event_id"], event["request_id"], event["source_id"], event["source_epoch"],
                 event["source_record_id"], event["source_version"], event["source_sequence"], recorded_at_utc, body))
+            row = self.db.execute('SELECT * FROM events WHERE event_id=?', (event['event_id'],)).fetchone()
+            row_hash = _digest({'row': dict(row), 'previous_sha256': head['sha256']})
+            self.db.execute("INSERT INTO event_integrity VALUES(?,?,?,?,'verified')",
+                            (row['position'], hashlib.sha256(body.encode()).hexdigest(), head['sha256'], row_hash))
+            self.db.execute('UPDATE chain_state SET count=?,head=? WHERE id=1', (head['count']+1, row_hash))
         return True
 
     def history(self, request_id: str) -> list[dict[str, Any]]:
         self.intent(request_id)
-        return [{"event": json.loads(row["body"]), "recorded_at_utc": row["recorded_at"]}
+        integrity = self._verify_chain(allow_legacy=True)
+        return [{**({"integrity": "unverified-legacy"} if integrity["integrity"] == "unverified-legacy" else {}), "event": json.loads(row["body"]), "recorded_at_utc": row["recorded_at"]}
                 for row in self.db.execute("SELECT * FROM events WHERE request_id=? ORDER BY position", (request_id,))]
 
     def project(self, request_id: str, *, as_of_utc: str,
@@ -405,6 +537,7 @@ class ObservationStore:
         ingestion and source observation times, so a historical view cannot use
         evidence learned later. Case IDs are stable for the same reason/events.
         """
+        self._verify_chain()
         intent = self.intent(request_id)
         as_of = _utc(as_of_utc)
         if type(freshness_seconds) is not dict or set(freshness_seconds) != KINDS:
@@ -521,11 +654,15 @@ class ObservationStore:
         return {"reconciliation_id": identity, **result}
 
     def reconciliation(self, reconciliation_id: str) -> dict[str, Any]:
+        self._verify_chain()
         _identifier(reconciliation_id, "reconciliation_id")
         row = self.db.execute("SELECT body FROM reconciliations WHERE reconciliation_id=?", (reconciliation_id,)).fetchone()
         if not row:
             raise ObservationError("unknown reconciliation identity")
-        return {"reconciliation_id": reconciliation_id, **json.loads(row["body"])}
+        value = json.loads(row['body'])
+        if _digest(value) != reconciliation_id:
+            raise ObservationError('journal integrity reconciliation mismatch')
+        return {"reconciliation_id": reconciliation_id, **value}
 
     def record_triage(self, *, triage_id: str, reconciliation_id: str, case_id: str,
                       actor_id: str, disposition: str, reason: str,
@@ -562,6 +699,7 @@ class ObservationStore:
         return True
 
     def triage_history(self, case_id: str) -> list[dict[str, Any]]:
+        self._verify_decisions()
         _identifier(case_id, "case_id")
         notes = [json.loads(row["body"]) for row in self.db.execute("SELECT body FROM triage WHERE case_id=?", (case_id,))]
         return sorted(notes, key=lambda item: (_utc(item["recorded_at_utc"]), item["triage_id"]))
@@ -576,6 +714,7 @@ class ObservationStore:
         attempt or changes source truth. A later recurrence remains active. Both
         snapshots and the exact freshness policy are immutable evidence bindings.
         """
+        self._verify_decisions()
         arguments = {
             "resolution_id": resolution_id,
             "opening_reconciliation_id": opening_reconciliation_id,
@@ -634,6 +773,7 @@ class ObservationStore:
 
     def resolution_history(self, case_id: str) -> list[dict[str, Any]]:
         """Historical application notes; current cases always remain computed."""
+        self._verify_decisions()
         _identifier(case_id, "case_id")
         notes = [json.loads(row["body"]) for row in self.db.execute(
             "SELECT body FROM resolutions WHERE case_id=?", (case_id,))]
