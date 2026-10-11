@@ -38,11 +38,31 @@ python3 -m pip download --only-binary=:all: --require-hashes \
 /tmp/receiver-env/bin/python -m pip install --no-index \
   --find-links /tmp/receiver-wheels --require-hashes \
   -r integration/receiver/requirements-darwin-arm64-py312.lock
+export SOURCE_DATE_EPOCH=1700000000 PYTHONHASHSEED=0
 /tmp/receiver-env/bin/python -m pip install --no-index --no-deps \
   --no-build-isolation ./integration/receiver
 python3 integration/receiver/tools/export_sources.py \
   --source-map /tmp/receiver-source-map.json --out /tmp/receiver-sources
 ```
+
+For reproducible wheels, install the platform lock with `--require-hashes` and
+build with `--no-build-isolation`. The locks pin setuptools `80.9.0`, wheel
+`0.45.1` and pip `25.2`. Isolated builds do not use these hash-checked locks.
+`SOURCE_DATE_EPOCH` fixes member timestamps; both builds of the same revision
+must use the same value. Without it, file and build times can change wheel
+bytes. The value above matches `tools/qualify_offline.sh`.
+
+The setuptools hook in `setup.py` sets `umask 022` in the backend process and
+makes staged Python and package-data files mode `0644`, leaving source files
+unchanged. The pinned backend writes `RECORD` with mode `0664`. This also covers
+source trees checked out under a restrictive umask. The installed-wheel CI
+suite includes `tests/test_wheel_reproducibility.py`: it builds under umasks
+`022` and `077` from separate paths with different source modes and timestamps,
+then compares every member mode and the complete wheel bytes. Run it with
+`python -m pytest integration/receiver/tests/test_wheel_reproducibility.py -q`
+from the repository root in the locked environment. Reproduction requires the
+same source, epoch, interpreter and compression implementation. This does not
+assert identical wheels between platforms or Python versions.
 
 The local source map is a JSON object whose keys are the eight logical names in
 [`sources.lock.json`](src/dimaggi_receiver/sources.lock.json), and whose values

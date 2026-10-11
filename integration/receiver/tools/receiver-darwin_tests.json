@@ -794,5 +794,7 @@
   "tests/test_unicode_boundary.py::test_unpaired_escaped_surrogates_rejected[{\"\\\\ud800\": 1}]",
   "tests/test_unicode_boundary.py::test_unpaired_escaped_surrogates_rejected[{\"nested\": [\"\\\\udfff\"]}]",
   "tests/test_unicode_boundary.py::test_valid_non_bmp_key_and_repeated_container",
-  "tests/test_unicode_boundary.py::test_valid_pair_and_literal_replacement_character_remain_distinct"
+  "tests/test_unicode_boundary.py::test_valid_pair_and_literal_replacement_character_remain_distinct",
+  "tests/test_wheel_reproducibility.py::test_wheel_build_uses_locked_tools",
+  "tests/test_wheel_reproducibility.py::test_wheel_bytes_and_modes_ignore_checkout_umask"
 ]

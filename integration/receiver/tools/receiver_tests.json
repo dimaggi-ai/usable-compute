@@ -1165,5 +1165,7 @@
   "tests/test_watch_current.py::test_current_reader_accepts_readonly_database",
   "tests/test_watch_current.py::test_current_reader_closes_its_connection",
   "tests/test_watch_current.py::test_heartbeat_refreshes_lease_and_future_clock_refuses",
-  "tests/test_watch_current.py::test_read_current_is_read_only_consistent_and_fails_closed"
+  "tests/test_watch_current.py::test_read_current_is_read_only_consistent_and_fails_closed",
+  "tests/test_wheel_reproducibility.py::test_wheel_build_uses_locked_tools",
+  "tests/test_wheel_reproducibility.py::test_wheel_bytes_and_modes_ignore_checkout_umask"
 ]
