@@ -12,7 +12,7 @@ import pytest
 
 from reference import HERE, DEPENDENCIES, classify, cooling_probe, load_joined, memory_screen, provenance
 
-REPOS = Path(os.environ.get("MAGGIE_REPOS_ROOT", HERE.parents[3] / "_Audits/2026-09-17-repo-aware-strategy/repos"))
+REPOS = Path(os.environ.get("MAGGIE_REPOS_ROOT", HERE.parents[3] / "_Audits/2026-09-17-repo-aware-strategy/repos")).resolve()
 CASES = json.loads((HERE / "cases.json").read_text())
 PROFILE = json.loads((HERE / "profile.json").read_text())
 
@@ -123,11 +123,68 @@ def test_host_and_freshness_fixture_facts():
     assert PROFILE["freshness"]["operator_dynamic"]["max_age_s"] is None
 
 
-def test_cooling_known_defect_is_still_present_at_pin(joined):
+def test_cooling_nonfinite_inputs_are_refused_at_pin(joined):
     rows = cooling_probe()
-    assert all(r["verdict"] == "DENY" for r in rows if r["case"].startswith("finite"))
-    assert all(r["verdict"] == "ADMIT" for r in rows if r["case"].startswith("nan"))
-    # Passing this test documents the defect, not a corrected cooling boundary.
+    by_case = {row["case"]: row for row in rows}
+    expected = {f"{kind}_{field}" for kind in ("nan", "inf", "neginf")
+                for field in ("hall_feed", "feeder", "step", "ride")}
+    assert set(by_case) == expected | {
+        "finite_limit", "finite_feeder", "finite_step", "finite_ride", "valid_after_invalid"}
+    for case in expected:
+        assert by_case[case]["verdict"] == "REFUSE"
+        assert by_case[case]["reasons"]
+    assert all(row["verdict"] == "DENY" for row in rows if row["case"].startswith("finite"))
+    assert rows[-1]["case"] == "valid_after_invalid"
+    assert rows[-1]["verdict"] == "ADMIT"
+    json.dumps(rows, allow_nan=False)
+
+
+@pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize("field", ["hall_feed", "feeder", "step", "ride"])
+def test_cooling_boundary_raises_value_error(joined, bad, field):
+    from cooling.admission import Hall, Feeder, Start
+    from cooling.ladder import rung
+    with pytest.raises(ValueError):
+        if field == "hall_feed":
+            Hall("h", "f", rung("direct-to-chip"), 100., 0, bad)
+        elif field == "feeder":
+            Feeder("f", bad, 40.)
+        elif field == "step":
+            Feeder("f", 40., bad)
+        else:
+            Start("j", {"h": 1}, bad)
+
+
+def test_cooling_probe_records_case_error_and_continues(joined, monkeypatch):
+    from cooling import admission
+    original = admission.admit
+    calls = 0
+
+    def fail_first(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ValueError("synthetic invalid admission")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(admission, "admit", fail_first)
+    rows = cooling_probe()
+    assert rows[0] == {"case": "finite_limit", "verdict": "REFUSE",
+                       "reasons": ["synthetic invalid admission"]}
+    assert rows[-1]["case"] == "valid_after_invalid"
+    assert rows[-1]["verdict"] == "ADMIT"
+    assert calls == 5
+
+
+def test_cooling_probe_does_not_hide_programming_errors(joined, monkeypatch):
+    from cooling import admission
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("unexpected implementation failure")
+
+    monkeypatch.setattr(admission, "admit", broken)
+    with pytest.raises(RuntimeError, match="unexpected implementation failure"):
+        cooling_probe()
 
 
 def test_existing_span_missing_and_strict_numeric_boundaries(joined):

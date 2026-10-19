@@ -21,7 +21,8 @@ PINS = {
     "scheduler-vs-more-gpus": "1853bd219e79b437b0c310fb40049ad272ceaf98",
     "network-vs-more-gpus": "3047ddb4f11e65c46b5bcab6f7674dd9fb3900e4",
     "reliability-economics": "92a4cd692d32ecc03943556fefc2317f53bde086",
-    "cooling-pue-ladder": "4b94c6d6fc653e9eebd2933402826cd76b3a108d",
+    # Review candidate from cooling PR #1; main adoption remains a separate gate.
+    "cooling-pue-ladder": "538314a785e8676a63b4a37aa4b9f9c22382ab93",
     "slice-packer-torus": "acc05b9d209a6f61df161634e929b6e6931c3d01",
     "span-contract": "e8a76e4af90a2573d7ea3ec4dbe1052c647d8c01",
 }
@@ -115,19 +116,32 @@ def memory_screen(joined, gang_size, seq_len=8192):
 
 
 def cooling_probe():
+    """Record invalid model inputs as REFUSE and continue the finite controls."""
     from cooling.admission import Hall, Feeder, Start, admit
     from cooling.ladder import rung
     cases = [
-        ("finite_limit", .01, 40., 40., 0.), ("nan_hall_feed", math.nan, 40., 40., 0.),
-        ("finite_feeder", 8., .01, 40., 0.), ("nan_feeder", 8., math.nan, 40., 0.),
-        ("finite_step", 8., 40., .01, 0.), ("nan_step", 8., 40., math.nan, 0.),
-        ("finite_ride", 8., 40., 40., 1000.), ("nan_ride", 8., 40., 40., math.nan),
+        ("finite_limit", .01, 40., 40., 0.),
+        ("finite_feeder", 8., .01, 40., 0.),
+        ("finite_step", 8., 40., .01, 0.),
+        ("finite_ride", 8., 40., 40., 1000.),
     ]
+    for label, bad in (("nan", math.nan), ("inf", math.inf), ("neginf", -math.inf)):
+        cases.extend([
+            (f"{label}_hall_feed", bad, 40., 40., 0.),
+            (f"{label}_feeder", 8., bad, 40., 0.),
+            (f"{label}_step", 8., 40., bad, 0.),
+            (f"{label}_ride", 8., 40., 40., bad),
+        ])
+    cases.append(("valid_after_invalid", 8., 40., 40., 0.))
     rows = []
     for name, feed, ceiling, step, ride in cases:
-        hall = Hall("h", "f", rung("direct-to-chip"), 100., 0, feed)
-        result = admit(Start("j", {"h": 1}, ride), {"h": hall}, {"f": Feeder("f", ceiling, step)})
-        rows.append({"case": name, "verdict": result.verdict, "reasons": list(result.reasons)})
+        try:
+            hall = Hall("h", "f", rung("direct-to-chip"), 100., 0, feed)
+            result = admit(Start("j", {"h": 1}, ride), {"h": hall}, {"f": Feeder("f", ceiling, step)})
+        except ValueError as exc:
+            rows.append({"case": name, "verdict": "REFUSE", "reasons": [str(exc)]})
+        else:
+            rows.append({"case": name, "verdict": result.verdict, "reasons": list(result.reasons)})
     return rows
 
 
