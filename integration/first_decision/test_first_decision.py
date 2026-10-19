@@ -12,7 +12,7 @@ import pytest
 
 from reference import HERE, DEPENDENCIES, classify, cooling_probe, load_joined, memory_screen, provenance
 
-REPOS = Path(os.environ.get("MAGGIE_REPOS_ROOT", HERE.parents[3] / "_Audits/2026-09-17-repo-aware-strategy/repos"))
+REPOS = Path(os.environ.get("MAGGIE_REPOS_ROOT", HERE.parents[3] / "_Audits/2026-09-17-repo-aware-strategy/repos")).resolve()
 CASES = json.loads((HERE / "cases.json").read_text())
 PROFILE = json.loads((HERE / "profile.json").read_text())
 

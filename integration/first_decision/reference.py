@@ -22,7 +22,7 @@ PINS = {
     "network-vs-more-gpus": "3047ddb4f11e65c46b5bcab6f7674dd9fb3900e4",
     "reliability-economics": "92a4cd692d32ecc03943556fefc2317f53bde086",
     # Review candidate from cooling PR #1; main adoption remains a separate gate.
-    "cooling-pue-ladder": "735d8eb8196b70aa6beea759bc3c9470ce286a74",
+    "cooling-pue-ladder": "538314a785e8676a63b4a37aa4b9f9c22382ab93",
     "slice-packer-torus": "acc05b9d209a6f61df161634e929b6e6931c3d01",
     "span-contract": "e8a76e4af90a2573d7ea3ec4dbe1052c647d8c01",
 }

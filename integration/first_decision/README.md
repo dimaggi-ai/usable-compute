@@ -60,15 +60,15 @@ programming exceptions still propagate. A plain green assertion of the old
 NaN-ADMIT defect would reward retaining the bug; these rejection assertions fail
 on the defective source and pass on the corrected source.
 
-The selected review candidate is cooling
-`735d8eb8196b70aa6beea759bc3c9470ce286a74`, matching the receiver's existing source
-lock. On 19 October 2026 it is the unmerged head of
-[cooling PR #1](https://github.com/dimaggi-ai/cooling-pue-ladder/pull/1); cooling
-main is still `4b94c6d6fc653e9eebd2933402826cd76b3a108d`. This branch prepares the
-contract and exact-source tests. Task #53 requires the cooling fix to land on
-main and that main commit to be recorded before final adoption; these tests do
-not satisfy or waive that separate prerequisite. Earlier evidence remains tied
-to its original source hashes and must not be overwritten.
+The selected cooling main commit is
+`538314a785e8676a63b4a37aa4b9f9c22382ab93`, merged on 19 October 2026 through
+[cooling PR #1](https://github.com/dimaggi-ai/cooling-pue-ladder/pull/1). Its tree
+is identical to the independently tested correction `735d8eb8`; the receiver's
+separate source lock retains that original exact source. The first-decision
+reference now records the merged main commit required by task #53. This satisfies
+the upstream landing prerequisite; independent acceptance of this receiver
+candidate remains separate. Earlier evidence remains tied to its original source
+hashes and must not be overwritten.
 The 64-chip negative case reuses the existing rough memory model and rejects
 90.707679216 GB against the modeled 80 GB limit. A 128-chip screen pass does not
 establish runtime memory fit or any host/storage feasibility.
