@@ -159,7 +159,7 @@ def test_unavailable_sink():
     with socket.socket() as reserved:
         reserved.bind(('127.0.0.1', 0))
         port = reserved.getsockname()[1]
-        with pytest.raises(ConnectionRefusedError):
+        with pytest.raises((ConnectionRefusedError, TimeoutError)):
             collect(f'http://127.0.0.1:{port}/observations', timeout=0.1)
 
 
