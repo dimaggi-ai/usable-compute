@@ -6,6 +6,12 @@ Six selected variants × seeds 0, 1 and 2 must preserve the complete finite outp
 The four pinned NaN admissions must reproduce, while corrected constructors/API
 must reject them. A separate process runs the owning scheduler coverage cases.
 
+The baseline reference is the pre-correction `first_decision/reference.py`
+(usable-compute 837ef442), kept in `historical/` and checked against its SHA-256
+before use. The live `first_decision/reference.py` now pins the corrected cooling
+commit and records invalid inputs as REFUSE, so it cannot reproduce the defect;
+this review therefore no longer reads it.
+
 This is compatibility evidence for a domain correction. It does not accept the
 application/authority receiver interface, run a workload or establish operator
 performance. Original pinned code and historical evidence remain unchanged.

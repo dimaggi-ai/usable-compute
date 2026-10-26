@@ -1,4 +1,5 @@
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,51 @@ def test_explicit_workspace_supports_shallow_checkout(relative, monkeypatch, tmp
                  "__name__": "isolated_workspace_probe"}
     exec(compile(source.read_text(), str(source), "exec"), namespace)
     assert namespace["WORKSPACE"] == tmp_path.resolve()
+
+
+def load_review():
+    spec = importlib.util.spec_from_file_location("domain_review_script", HERE / "review.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_path(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_historical_reference_is_bound_to_its_bytes():
+    review = load_review()
+    assert hashlib.sha256(review.HISTORICAL_REFERENCE.read_bytes()).hexdigest() == review.HISTORICAL_REFERENCE_SHA256
+    historical = review.historical_reference()
+    assert historical.PINS["cooling-pue-ladder"] == "4b94c6d6fc653e9eebd2933402826cd76b3a108d"
+
+
+def test_changed_historical_reference_is_refused(tmp_path):
+    review = load_review()
+    copy = tmp_path / "reference.py"
+    copy.write_bytes(review.HISTORICAL_REFERENCE.read_bytes() + b"\n# edited\n")
+    review.HISTORICAL_REFERENCE = copy
+    with pytest.raises(ValueError, match="historical first-decision reference changed"):
+        review.historical_reference()
+
+
+def test_live_reference_differs_from_the_baseline_only_in_the_cooling_pin():
+    review = load_review()
+    old = review.historical_reference().PINS
+    new = load_path("live_first_decision_reference", HERE.parent / "first_decision" / "reference.py").PINS
+    assert {k for k in old if old[k] != new[k]} == {"cooling-pue-ladder"}
+    assert new["cooling-pue-ladder"] == "538314a785e8676a63b4a37aa4b9f9c22382ab93"
+    assert set(old) == set(new)
+
+
+def test_review_script_loads_its_baseline_through_the_hash_check():
+    source = (HERE / "review.py").read_text()
+    assert "reference = historical_reference()" in source
+    assert 'working / "research/integration/first_decision/reference.py"' not in source
 
 
 @pytest.fixture(scope="module")
