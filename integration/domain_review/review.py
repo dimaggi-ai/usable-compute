@@ -3,6 +3,10 @@
 Only the five imported cooling entry points are substituted. The joined model,
 placement, healthy-step and recovery implementations remain at the audit pins.
 This is a declared model compatibility experiment, never executor proof.
+
+The defective baseline is reproduced with the first-decision reference as it was
+before the cooling correction. That file is kept beside this script, bound by hash,
+so later changes to integration/first_decision/reference.py do not alter this review.
 """
 from __future__ import annotations
 
@@ -19,6 +23,11 @@ import platform
 import subprocess
 import sys
 
+HERE = Path(__file__).resolve().parent
+# first_decision/reference.py at usable-compute 837ef442, before the cooling pin moved to 538314a7.
+HISTORICAL_REFERENCE = HERE / "historical" / "first_decision_reference_837ef442.py"
+HISTORICAL_REFERENCE_SHA256 = "f95a47980b4460e5b0cf42958a994e50aa78c2137f36c6a345067268e432fdb8"
+
 
 def load_module(name, path, *, package=False):
     kwargs = {"submodule_search_locations": [str(path.parent)]} if package else {}
@@ -31,6 +40,14 @@ def load_module(name, path, *, package=False):
 
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def historical_reference():
+    """Load the pre-correction first-decision reference, refusing any changed bytes."""
+    actual = sha(HISTORICAL_REFERENCE)
+    if actual != HISTORICAL_REFERENCE_SHA256:
+        raise ValueError(f"historical first-decision reference changed: {actual}")
+    return load_module("review_first_decision", HISTORICAL_REFERENCE)
 
 
 def write(path, value):
@@ -68,7 +85,7 @@ def run(workspace, out):
         raise ValueError("review output must be empty; historical evidence is preserved")
     working = workspace / "projects/infrastructure/DIMAGGI-Infrastructure-Intelligence"
     audited = workspace / "projects/infrastructure/_Audits/2026-09-17-repo-aware-strategy/repos"
-    reference = load_module("review_first_decision", working / "research/integration/first_decision/reference.py")
+    reference = historical_reference()
     pinned_sources = reference.provenance(audited)
     joined = reference.load_joined(audited)
     # Keep the entire pinned import path explicit, including package caches.
@@ -119,7 +136,7 @@ def run(workspace, out):
               "cpu_executor": "not_run", "execution_authorized": False, "mutation_request": None,
               "claim_limit": "This is independent local domain verification, not human receiver acceptance or execution permission."}
     write(out / "review-report.json", report)
-    files = [Path(__file__), working / "research/integration/first_decision/reference.py"]
+    files = [Path(__file__), HISTORICAL_REFERENCE]
     files += list((working / "cooling-pue-ladder/cooling").glob("*.py"))
     files += [working / "scheduler-vs-more-gpus/capacity" / name for name in
               ("resource_coverage.py", "coverage_examples.py", "resource_evidence.py", "resource_evidence_examples.py")]
