@@ -23,6 +23,9 @@ EVIDENCE_CLASSES = ('synthetic', 'emulated', 'lab-measured', 'deployment-measure
 STAGES = ('modeled-feasible', 'admissible', 'reserved', 'dispatched', 'verified')
 ROLES = ('compute', 'power', 'working-path', 'protection-path', 'transfer-path')
 MAX_INT = 2**53 - 1
+# The one outcome measure a plan binds: achieved step throughput over the plan's
+# modeled step throughput, reported by an observer independent of the executor.
+METRIC = 'goodput-fraction'
 
 
 def digest(value):
@@ -36,6 +39,11 @@ def _count(name, value, *, optional=False):
     if type(value) is not int or not 0 <= value <= MAX_INT:
         raise ValueError(f'{name} must be an exact nonnegative integer')
     return value
+
+
+def _real(value):
+    """A finite int or float; booleans are not measurements."""
+    return type(value) in (int, float) and math.isfinite(value)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,6 +166,8 @@ class SimulatedLeaseOwner:
 
     `lose_response` holds resources whose next reply is dropped after the
     reservation is applied, to exercise unknown-outcome reconciliation.
+    `lose_release` holds keys whose next release request is lost before the
+    owner applies it, so the caller cannot tell whether the grant was freed.
     """
 
     def __init__(self, name, capacities, revisions=None):
@@ -167,6 +177,7 @@ class SimulatedLeaseOwner:
         self.grants = {}
         self.token = 0
         self.lose_response = set()
+        self.lose_release = set()
         self.lock = threading.Lock()
 
     def _held(self, resource, now):
@@ -204,6 +215,9 @@ class SimulatedLeaseOwner:
 
     def release(self, key):
         with self.lock:
+            if key in self.lose_release:
+                self.lose_release.discard(key)
+                raise LostResponse(key)
             return self.grants.pop(key, None) is not None
 
     def check(self, grant, now):
@@ -220,7 +234,11 @@ class SimulatedLeaseOwner:
 
 @dataclasses.dataclass(frozen=True)
 class Plan:
-    """One binding. `stage` is the furthest stage reached; `status` says how it ended."""
+    """One binding. `stage` is the furthest stage reached; `status` says how it ended.
+
+    `objective` is the minimum METRIC value, in (0, 1], that verification
+    requires. It is fixed when the plan is made, not taken from the outcome.
+    """
     plan_id: str
     job_id: str
     option: str
@@ -235,6 +253,11 @@ class Plan:
     grants: tuple = ()
     unknown: tuple = ()
     dispatched_at: int = None
+    objective: float = None
+
+    def __post_init__(self):
+        if self.objective is not None and not (_real(self.objective) and 0 < self.objective <= 1):
+            raise ValueError(f'objective must be a {METRIC} in (0, 1]')
 
     def to_dict(self):
         out = dataclasses.asdict(self)
@@ -261,6 +284,9 @@ def revalidate(plan, observations, now, admission=None):
         current = latest.get(ref['path_id'])
         if current is None:
             reasons.append(f"path {ref['path_id']} has no current observation")
+        elif (current.source, current.evidence_class) != (ref['source'], ref['evidence_class']):
+            reasons.append(f"path {ref['path_id']} is now reported by {current.source} ({current.evidence_class}), "
+                           f"not the planned {ref['source']} ({ref['evidence_class']})")
         elif current.topology_revision != ref['topology_revision'] or current.source_epoch != ref['source_epoch']:
             reasons.append(f"path {ref['path_id']} changed since the plan was made")
         elif now >= current.expires_at:
@@ -314,15 +340,85 @@ def reconcile(plan, owners, now):
                    reasons=plan.reasons + tuple(f'{k} not held by its owner' for k in missing))
 
 
-def compensate(plan, owners):
-    """Release every grant the plan holds. Safe to repeat."""
-    for grant in plan.grants:
-        owners[grant.owner].release(grant.key)
-    return advance(plan, status='compensated', grants=())
+def compensate(plan, owners, now):
+    """Release every grant and unknown-outcome key the plan may hold, then confirm with each owner.
+
+    The plan is 'compensated' only when no owner still holds any of its keys.
+    A key that is still held (for example because the release was lost) leaves
+    'compensation-pending' with those grants listed. Safe to repeat.
+    """
+    owner_of = {claim_key(plan, i): c.owner for i, c in enumerate(plan.claims)}
+    keys = [(g.owner, g.key) for g in plan.grants] + [(owner_of[k], k) for k in plan.unknown]
+    held = []
+    for owner, key in keys:
+        try:
+            owners[owner].release(key)
+        except LostResponse:
+            pass
+        found = owners[owner].lookup(key, now)
+        if found is not None:
+            held.append(found)
+    if held:
+        return advance(plan, status='compensation-pending', grants=tuple(held), unknown=(),
+                       reasons=tuple(f'{g.key} still held by {g.owner}' for g in held))
+    return advance(plan, status='compensated', grants=(), unknown=())
 
 
-def dispatch(plan, owners, observations, now, effect, *, admission=None):
-    """Revalidate and fence every grant, then run the bounded effect once."""
+class EffectLedger:
+    """Authoritative record of the effect run for each reservation (in-process simulation).
+
+    The execution identity is the plan id plus every grant's owner, key and
+    fencing token, so one reservation can start its effect once, including
+    under concurrent dispatch of the same snapshot. States are 'running',
+    'done' and 'unknown'. An effect that ends without a clear result stays
+    'unknown' and is not retried until an independent observer resolves it.
+    """
+
+    def __init__(self):
+        self.records = {}
+        self.lock = threading.Lock()
+
+    def begin(self, execution, now):
+        with self.lock:
+            record = self.records.get(execution)
+            if record is not None:
+                raise Refused(f"effect for this reservation is already {record['state']}")
+            self.records[execution] = {'state': 'running', 'started_at': now}
+
+    def finish(self, execution, state):
+        with self.lock:
+            self.records[execution]['state'] = state
+
+    def state(self, execution):
+        with self.lock:
+            record = self.records.get(execution)
+            return record and record['state']
+
+    def resolve(self, execution, ran, source):
+        """Settle an unknown execution from an independent observation of whether the effect ran."""
+        if source in (None, 'planner', 'executor'):
+            raise ValueError('only an independent observer can resolve an unknown effect')
+        with self.lock:
+            record = self.records.get(execution)
+            if record is None or record['state'] != 'unknown':
+                raise Refused('only an unknown effect can be resolved')
+            if ran:
+                record['state'] = 'done'
+            else:
+                del self.records[execution]
+
+
+def execution_id(plan):
+    return digest([plan.plan_id, [[g.owner, g.key, g.token] for g in plan.grants]])
+
+
+def dispatch(plan, owners, observations, now, effect, *, executions, admission=None):
+    """Revalidate and fence every grant, then run the bounded effect once per reservation.
+
+    `executions` is the EffectLedger that records the effect. Dispatching the
+    same reserved snapshot again, or concurrently, returns 'duplicate' without
+    running it. An effect that raises leaves 'effect-unknown', not a retry.
+    """
     if plan.stage != 'reserved' or plan.status != 'ok':
         raise ValueError('only a fully reserved plan can be dispatched')
     reasons = list(revalidate(plan, observations, now, admission))
@@ -333,13 +429,26 @@ def dispatch(plan, owners, observations, now, effect, *, admission=None):
             reasons.append(str(exc))
     if reasons:
         return advance(plan, status='invalidated', reasons=tuple(reasons))
-    effect(plan)
+    execution = execution_id(plan)
+    try:
+        executions.begin(execution, now)
+    except Refused as exc:
+        return advance(plan, status='duplicate', reasons=(str(exc),))
+    try:
+        effect(plan)
+    except Exception as exc:
+        executions.finish(execution, 'unknown')
+        return advance(plan, status='effect-unknown',
+                       reasons=(f'effect ended without a clear result ({type(exc).__name__}); resolve before any retry',))
+    executions.finish(execution, 'done')
     return advance(plan, stage='dispatched', dispatched_at=now)
 
 
 def verify(plan, outcome):
-    """Accept only an independent outcome observed after dispatch that meets the objective.
+    """Accept only an independent outcome observed after dispatch that meets the plan's objective.
 
+    The target comes from the plan. The outcome must measure METRIC with a
+    finite, nonnegative number; an objective it reports must equal the plan's.
     A successful dispatch or healthy device signal is not a verified outcome.
     """
     if plan.stage != 'dispatched':
@@ -351,9 +460,17 @@ def verify(plan, outcome):
         problems.append('outcome was not observed after dispatch')
     if outcome.get('job_id') != plan.job_id:
         problems.append('outcome names a different job')
-    target, achieved = outcome.get('objective'), outcome.get('achieved')
-    if not isinstance(target, (int, float)) or not isinstance(achieved, (int, float)) or achieved < target:
-        problems.append('objective not met or not measured')
+    target, achieved = plan.objective, outcome.get('achieved')
+    if target is None:
+        problems.append('plan has no bound objective')
+    if outcome.get('metric') != METRIC:
+        problems.append(f'outcome does not measure {METRIC}')
+    if 'objective' in outcome and (not _real(outcome['objective']) or outcome['objective'] != target):
+        problems.append('outcome objective differs from the plan')
+    if not _real(achieved) or achieved < 0:
+        problems.append('achieved value is not a finite nonnegative measurement')
+    elif target is not None and achieved < target:
+        problems.append('objective not met')
     if problems:
         return advance(plan, status='unverified', reasons=tuple(problems))
     return advance(plan, stage='verified')

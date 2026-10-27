@@ -26,13 +26,30 @@ What the tests establish on synthetic evidence:
   reservation or dispatch before any effect runs;
 - a lost owner reply leaves the plan outcome-unknown until reconciliation, and
   a retry with the same idempotency keys takes no further capacity;
-- protection is accepted only when SRLG disjointness is proven by one
-  authority; unknown or differently named groups are not assumed disjoint;
+- each reservation runs its effect at most once: `EffectLedger` records an
+  execution identity (plan id plus every grant's owner, key and fencing token),
+  so replaying the reserved snapshot, or dispatching it concurrently, returns
+  `duplicate`; an effect that ends without a clear result stays
+  `effect-unknown` and is not retried until an independent observer resolves it;
+- compensation releases held and unknown-outcome keys, then confirms with each
+  owner; it reports `compensated` only when no owner still holds a key, and
+  `compensation-pending` otherwise;
+- a path is usable only between the plan's two sites. Protection counts only
+  when SRLG disjointness is proven by one authority (unknown or differently
+  named groups are not assumed disjoint), the protection path joins the same
+  sites as the working path, and it passes the same span-contract admission,
+  both at planning and again before reservation and dispatch. Otherwise the
+  plan is refused rather than reported as protected;
 - missing capacity, delay or optical-margin evidence refuses rather than
   defaulting;
-- verification needs an independent observation after dispatch.
+- revalidation binds each path's source and evidence class, not just its
+  revision and epoch; a replacement source invalidates the plan;
+- verification needs an independent observation after dispatch, measuring
+  `goodput-fraction` against the objective fixed in the plan (a value in
+  (0, 1]). Booleans, NaN, infinities and negative values are rejected.
 
-Limits: the lease owners are in-process simulations, the evidence is synthetic,
+Limits: the lease owners and the effect ledger are in-process simulations, the evidence is synthetic,
 and nothing contacts a controller, scheduler or device. The working-path claim is
 the mean cut rate, not the burst peak. Ledger durations omit stay and stitch
-transition time (packet C1). The output lists every gap under `not_checked`.
+transition time (packet C1). The fencing check and the effect are not one atomic
+step here; a real executor must check the fencing token itself. The output lists every gap under `not_checked`.

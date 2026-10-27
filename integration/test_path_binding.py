@@ -10,9 +10,20 @@ import cross_site as cs
 import path_binding as pb
 
 
+def held_fixture(**request_changes):
+    sites, observations, request, owners, admission = fixture(**request_changes)
+    held = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+    return sites, observations, request, owners, admission, held
+
+
+def outcome(**changes):
+    return dict(dict(source='observer', observed_at=1300, job_id='train-70b', metric=pb.METRIC, achieved=0.95), **changes)
+
+
 def fixture(**request_changes):
     sites, observations, job = cs.scenario()
-    request = cs.CrossSiteRequest('train-70b', job, 'site-a', 'site-b', 'ab-1', 'ab-2', protection_required=True)
+    request = cs.CrossSiteRequest('train-70b', job, 'site-a', 'site-b', 'ab-1', 'ab-2', protection_required=True,
+                                  objective=0.9)
     request = dataclasses.replace(request, **request_changes)
     return sites, observations, request, cs.owners_for(sites, observations), cs.admission_check(sites)
 
@@ -34,14 +45,12 @@ class PlanStages(unittest.TestCase):
         sites, observations, request, owners, admission = fixture()
         effects = []
         held = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
-        done = pb.dispatch(held, owners, observations, 1120, effects.append, admission=admission)
+        done = pb.dispatch(held, owners, observations, 1120, effects.append, executions=pb.EffectLedger(),
+                           admission=admission)
         self.assertEqual((done.stage, len(effects)), ('dispatched', 1))
         for bad in (dict(source='executor'), dict(observed_at=1120), dict(achieved=0.5), dict(job_id='other')):
-            outcome = dict(source='observer', observed_at=1300, job_id='train-70b', objective=0.9, achieved=0.95)
-            outcome.update(bad)
-            self.assertEqual(pb.verify(done, outcome).status, 'unverified', bad)
-        ok = pb.verify(done, dict(source='observer', observed_at=1300, job_id='train-70b', objective=0.9, achieved=0.95))
-        self.assertEqual(ok.stage, 'verified')
+            self.assertEqual(pb.verify(done, outcome(**bad)).status, 'unverified', bad)
+        self.assertEqual(pb.verify(done, outcome()).stage, 'verified')
 
 
 class Reservations(unittest.TestCase):
@@ -67,7 +76,7 @@ class Reservations(unittest.TestCase):
         partial = [r for r in results if r.status == 'partial']
         self.assertEqual(len(partial), 80 - 62)
         for r in partial:
-            pb.compensate(r, owners)
+            pb.compensate(r, owners, 1111)
         self.assertEqual(sum(g.amount for g in owners['site-a'].grants.values() if g.resource == 'accelerators'), 62 * 512)
 
     def test_expired_evidence_refuses_before_reservation_and_effect(self):
@@ -85,7 +94,7 @@ class Reservations(unittest.TestCase):
         held = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110,
                           lease_s=30, admission=admission)
         effects = []
-        fenced = pb.dispatch(held, owners, observations, 1150, effects.append, admission=admission)
+        fenced = pb.dispatch(held, owners, observations, 1150, effects.append, executions=pb.EffectLedger(), admission=admission)
         self.assertEqual((fenced.status, effects), ('invalidated', []))
         self.assertTrue(any('lease' in r for r in fenced.reasons))
 
@@ -95,7 +104,7 @@ class Reservations(unittest.TestCase):
         changed = (dataclasses.replace(observations[0], topology_revision=cs.rev('ab-1/r2'), source_epoch=2),) + observations[1:]
         owners['transport'].publish_revision('ab-1', changed[0].topology_revision)
         effects = []
-        result = pb.dispatch(held, owners, changed, 1120, effects.append, admission=admission)
+        result = pb.dispatch(held, owners, changed, 1120, effects.append, executions=pb.EffectLedger(), admission=admission)
         self.assertEqual((result.status, effects), ('invalidated', []))
         self.assertTrue(any('ab-1 changed' in r for r in result.reasons))
         self.assertTrue(any('revision changed after reservation' in r for r in result.reasons))
@@ -108,10 +117,10 @@ class Reservations(unittest.TestCase):
         self.assertEqual(result.status, 'partial')
         self.assertTrue(result.grants)                                        # compute and power were taken
         self.assertIn('revision changed', result.reasons[0])
-        undone = pb.compensate(result, owners)
+        undone = pb.compensate(result, owners, 1111)
         self.assertEqual(undone.status, 'compensated')
         self.assertFalse(any(owners[s].grants for s in ('site-a', 'site-b', 'transport')))
-        pb.compensate(result, owners)                                         # idempotent
+        pb.compensate(result, owners, 1111)                                         # idempotent
 
     def test_partial_success_is_inspectable_and_recoverable(self):
         sites, observations, request, owners, admission = fixture()
@@ -121,8 +130,8 @@ class Reservations(unittest.TestCase):
         self.assertEqual([g.resource for g in result.grants], ['accelerators', 'power', 'accelerators', 'power', 'ab-1'])
         self.assertIn('ab-2', result.reasons[0])
         with self.assertRaises(ValueError):
-            pb.dispatch(result, owners, observations, 1120, lambda p: None)
-        pb.compensate(result, owners)
+            pb.dispatch(result, owners, observations, 1120, lambda p: None, executions=pb.EffectLedger())
+        pb.compensate(result, owners, 1111)
         self.assertFalse(owners['transport'].grants)
 
     def test_lost_reply_is_unknown_then_reconciled_without_double_booking(self):
@@ -199,7 +208,118 @@ class Contract(unittest.TestCase):
         self.assertEqual(steps['revalidate-after-degradation']['status'], 'invalidated')
         self.assertEqual(steps['replan-protect-via-unknown-diversity']['status'], 'refused')
         self.assertEqual(steps['reserve-without-protection']['stage'], 'reserved')
+        self.assertEqual(steps['replay-reserved-snapshot']['status'], 'duplicate')
         self.assertEqual(first['effects_run'], 1)
+
+
+class ReviewFindings(unittest.TestCase):
+    """Regressions for Codex's review of PR #7 at d65d61f (findings 1-5)."""
+
+    def test_1_replayed_snapshot_runs_the_effect_once(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        executions, effects = pb.EffectLedger(), []
+        done = pb.dispatch(held, owners, observations, 1120, effects.append, executions=executions, admission=admission)
+        replay = pb.dispatch(held, owners, observations, 1121, effects.append, executions=executions, admission=admission)
+        self.assertEqual((done.stage, replay.stage, replay.status, len(effects)), ('dispatched', 'reserved', 'duplicate', 1))
+        self.assertIn('already done', replay.reasons[0])
+
+    def test_1_concurrent_dispatch_of_one_snapshot_runs_the_effect_once(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        executions, effects, results, barrier = pb.EffectLedger(), [], [], threading.Barrier(32)
+
+        def attempt():
+            barrier.wait()
+            results.append(pb.dispatch(held, owners, observations, 1120, effects.append, executions=executions))
+        threads = [threading.Thread(target=attempt) for _ in range(32)]
+        [t.start() for t in threads]; [t.join() for t in threads]
+        self.assertEqual(len(effects), 1)
+        self.assertEqual(sorted(r.status for r in results).count('duplicate'), 31)
+        self.assertEqual([r.stage for r in results].count('dispatched'), 1)
+
+    def test_1_ambiguous_effect_is_not_retried_until_resolved(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        executions, calls = pb.EffectLedger(), []
+
+        def flaky(plan):
+            calls.append(plan.plan_id)
+            raise TimeoutError('executor reply lost')
+        unknown = pb.dispatch(held, owners, observations, 1120, flaky, executions=executions)
+        self.assertEqual((unknown.stage, unknown.status), ('reserved', 'effect-unknown'))
+        retry = pb.dispatch(held, owners, observations, 1121, calls.append, executions=executions)
+        self.assertEqual((retry.status, len(calls)), ('duplicate', 1))
+        self.assertIn('already unknown', retry.reasons[0])
+        with self.assertRaises(ValueError):
+            executions.resolve(pb.execution_id(held), False, 'executor')
+        executions.resolve(pb.execution_id(held), False, 'synthetic-progress-observer')   # observed: it never ran
+        self.assertEqual(pb.dispatch(held, owners, observations, 1122, calls.append, executions=executions).stage,
+                         'dispatched')
+        self.assertEqual(len(calls), 2)
+
+    def test_2_compensation_resolves_unknown_keys_or_stays_pending(self):
+        sites, observations, request, owners, admission = fixture()
+        owners['transport'].lose_response.add('ab-2')
+        unknown = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+        self.assertEqual(unknown.status, 'outcome-unknown')
+        lost_key = unknown.unknown[0]
+        owners['transport'].lose_release.add(lost_key)                        # the release itself is lost
+        pending = pb.compensate(unknown, owners, 1111)
+        self.assertEqual(pending.status, 'compensation-pending')
+        self.assertEqual([g.key for g in pending.grants], [lost_key])
+        self.assertTrue(owners['transport'].grants)
+        done = pb.compensate(pending, owners, 1112)
+        self.assertEqual(done.status, 'compensated')
+        self.assertFalse(any(owners[s].grants for s in ('site-a', 'site-b', 'transport')))
+        # Without a lost release, the unknown key is released and confirmed in one pass.
+        sites, observations, request, owners, admission = fixture()
+        owners['transport'].lose_response.add('ab-2')
+        unknown = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+        self.assertEqual(pb.compensate(unknown, owners, 1111).status, 'compensated')
+        self.assertFalse(owners['transport'].grants)
+
+    def test_3_verification_rejects_nonfinite_boolean_and_unbound_values(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        done = pb.dispatch(held, owners, observations, 1120, lambda p: None, executions=pb.EffectLedger())
+        for bad in (dict(achieved=float('nan')), dict(achieved=float('inf')), dict(achieved=True),
+                    dict(achieved=-0.5), dict(objective=-1, achieved=0), dict(objective=True, achieved=True),
+                    dict(objective=float('nan')), dict(objective=0.5, achieved=0.6), dict(metric='device-healthy'),
+                    dict(metric=None)):
+            self.assertEqual(pb.verify(done, outcome(**bad)).status, 'unverified', bad)
+        self.assertEqual(pb.verify(done, outcome(objective=0.9)).stage, 'verified')
+        unbound = pb.advance(done, objective=None)
+        self.assertIn('plan has no bound objective', pb.verify(unbound, outcome()).reasons)
+        for bad in (0, -1, 1.5, True, float('nan')):
+            with self.assertRaises(ValueError, msg=bad):
+                pb.advance(done, objective=bad)
+
+    def test_4_protection_needs_matching_endpoints_and_admission(self):
+        for changes, reason in ((dict(sites=('other-a', 'other-b')), 'not the working endpoints'),
+                                (dict(rtt_us=None, insertion_loss_db=None, bit_error_rate=None), 'protection admission'),
+                                (dict(bit_error_rate=None), 'protection admission')):
+            sites, observations, request, owners, admission = fixture()
+            bad = (observations[0], dataclasses.replace(observations[1], **changes)) + observations[2:]
+            plan = cs.plan(request, sites, bad, 1100)
+            self.assertEqual(plan.status, 'refused', changes)
+            self.assertTrue(any(reason in r for r in plan.reasons), (changes, plan.reasons))
+        sites, observations, request, owners, admission = fixture(protection_required=False)
+        wrong = (dataclasses.replace(observations[0], sites=('site-a', 'site-c')),) + observations[1:]
+        self.assertTrue(any('not site-a/site-b' in r for r in cs.plan(request, sites, wrong, 1100).reasons))
+
+    def test_4_protection_admission_is_rechecked_before_dispatch(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        self.assertEqual(held.domain['protection_admission']['decision'], 'span')
+        moved = (observations[0], dataclasses.replace(observations[1], topology_revision=cs.rev('ab-2/r2'))) + observations[2:]
+        # The protection path's plant revision moved while its observation epoch did not.
+        reasons = admission(held, {o.path_id: o for o in moved}, 1120)['reasons']
+        self.assertTrue(reasons and all(r.startswith('protection ab-2: ') for r in reasons), reasons)
+
+    def test_5_replaced_source_or_evidence_class_invalidates(self):
+        for changes in (dict(source='untrusted-other-source'), dict(evidence_class='emulated')):
+            sites, observations, request, owners, admission, held = held_fixture()
+            bad = (dataclasses.replace(observations[0], **changes),) + observations[1:]
+            effects = []
+            result = pb.dispatch(held, owners, bad, 1120, effects.append, executions=pb.EffectLedger(), admission=admission)
+            self.assertEqual((result.status, effects), ('invalidated', []), changes)
+            self.assertTrue(any('not the planned synthetic-path-collector (synthetic)' in r for r in result.reasons))
 
 
 if __name__ == '__main__':

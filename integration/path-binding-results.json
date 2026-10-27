@@ -296,6 +296,65 @@
         }
       ],
       "option": "stitch",
+      "reasons": [
+        "effect for this reservation is already done"
+      ],
+      "stage": "reserved",
+      "status": "duplicate",
+      "step": "replay-reserved-snapshot"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
       "reasons": [],
       "stage": "verified",
       "status": "ok",

@@ -62,6 +62,7 @@ class CrossSiteRequest:
     protection_path: str = None
     protection_required: bool = False
     activation_gb_per_step: float = 4.0
+    objective: float = None                     # minimum pb.METRIC the outcome must reach
 
 
 def site_fabric(site):
@@ -117,6 +118,8 @@ def plan(request, sites, observations, now):
     # Without path evidence the ledger prices stitch and move on a placeholder circuit; report the gap instead.
     if working is None:
         path_gap = f'path {request.working_path} has no observation'
+    elif set(working.sites) != {home.site_id, away.site_id}:
+        path_gap = f"path {working.path_id} joins {'/'.join(working.sites)}, not {home.site_id}/{away.site_id}"
     elif now >= working.expires_at:
         path_gap = f'path {working.path_id} observation expired'
     elif working.capacity_bytes_per_s is None or working.rtt_us is None:
@@ -170,18 +173,28 @@ def plan(request, sites, observations, now):
                 domain['protection_diversity'] = relation
                 if protection is None or relation != 'disjoint':
                     reasons.append(f'protection: no path proven disjoint from {working.path_id} ({relation})')
+                elif set(protection.sites) != set(working.sites):
+                    reasons.append(f"protection: path {protection.path_id} joins {'/'.join(protection.sites)}, "
+                                   f"not the working endpoints")
                 elif protection.capacity_bytes_per_s is None or now >= protection.expires_at:
                     reasons.append(f'protection: path {protection.path_id} lacks fresh capacity evidence')
                 elif demand > protection.capacity_bytes_per_s:
                     reasons.append(f'protection: path {protection.path_id} cannot carry {demand} B/s')
                 else:
-                    evidence.append(protection.ref())
-                    claims.append(pb.Claim('transport', protection.path_id, demand, 'bytes/s',
-                                           'protection-path', protection.topology_revision))
+                    # The fallback must pass the same admission as the working path, or it protects nothing.
+                    fallback = span_admission(request.job_id, dict(home_rect, site=home.site_id), protection,
+                                              home.power_kw - kw(g_home), now, protection.topology_revision)
+                    domain['protection_admission'] = fallback
+                    refusals = admission_refusals(fallback)
+                    reasons += ['protection ' + r for r in refusals]
+                    if not refusals:
+                        evidence.append(protection.ref())
+                        claims.append(pb.Claim('transport', protection.path_id, demand, 'bytes/s',
+                                               'protection-path', protection.topology_revision))
         evaluated.append((option['option'], reasons, (claims, evidence, domain)))
     rejected = {name: reasons for name, reasons, _ in evaluated if reasons}
     chosen = next(((name, body) for name, reasons, body in evaluated if not reasons), None)
-    base = dict(job_id=request.job_id, grants=(), unknown=())
+    base = dict(job_id=request.job_id, grants=(), unknown=(), objective=request.objective)
     if chosen is None:
         return pb.Plan(plan_id=pb.digest(['refused', now, rejected]), option='refuse', stage='modeled-feasible',
                        status='refused', claims=(), evidence=(), valid_until=now,
@@ -212,22 +225,30 @@ def admission_refusals(verdict):
 def admission_check(sites):
     """Admission callback for revalidate(): rerun span against the plant's current revision.
 
-    Everything it needs comes from the plan itself, so a re-plan on another path
-    is checked against that path.
+    Both the working and the protection path are rechecked. Everything it needs
+    comes from the plan itself, so a re-plan on another path is checked against
+    that path.
     """
     def check(plan, latest, now):
         if plan.option != 'stitch':
             return None
-        working_id = next(c.resource for c in plan.claims if c.role == 'working-path')
-        planned = next(e for e in plan.evidence if e['path_id'] == working_id)
         home = sites[plan.domain['home']]
         home_kw = next(c.amount for c in plan.claims if c.owner == home.site_id and c.resource == 'power')
         rect = dict(plan.domain[f'geometry:{home.site_id}']['requests'][0], site=home.site_id)
-        replayed = dataclasses.replace(latest[working_id], topology_revision=planned['topology_revision'],
-                                       observed_at=planned['observed_at'])
-        verdict = span_admission(plan.job_id, rect, replayed, home.power_kw - home_kw, now,
-                                 latest[working_id].topology_revision)
-        return dict(verdict, passes_supplied_checks=not admission_refusals(verdict))
+        reasons = []
+        for claim in plan.claims:
+            if claim.role not in ('working-path', 'protection-path'):
+                continue
+            planned = next(e for e in plan.evidence if e['path_id'] == claim.resource)
+            replayed = dataclasses.replace(latest[claim.resource], topology_revision=planned['topology_revision'],
+                                           observed_at=planned['observed_at'])
+            verdict = span_admission(plan.job_id, rect, replayed, home.power_kw - home_kw, now,
+                                     latest[claim.resource].topology_revision)
+            refused = verdict['reasons'] or [f"span decision {verdict['decision']}"]
+            if admission_refusals(verdict):
+                prefix = '' if claim.role == 'working-path' else f'protection {claim.resource}: '
+                reasons += [prefix + r for r in refused]
+        return dict(reasons=reasons, passes_supplied_checks=not reasons)
     return check
 
 
@@ -277,9 +298,11 @@ def summarize(name, plan):
 def experiment():
     """Admit, reserve, contend, dispatch, verify; then degrade the working path and re-plan."""
     sites, observations, job = scenario()
-    request = CrossSiteRequest('train-70b', job, 'site-a', 'site-b', 'ab-1', 'ab-2', protection_required=True)
+    request = CrossSiteRequest('train-70b', job, 'site-a', 'site-b', 'ab-1', 'ab-2', protection_required=True,
+                               objective=0.9)
     owners = owners_for(sites, observations)
     admission = admission_check(sites)
+    executions = pb.EffectLedger()
     effects, steps = [], []
 
     first = plan(request, sites, observations, now=1100)
@@ -288,10 +311,14 @@ def experiment():
     steps.append(summarize('reserve', held))
     rival = plan(dataclasses.replace(request, job_id='rival'), sites, observations, now=1115)
     steps.append(summarize('rival-reserve', pb.reserve(rival, owners, observations, now=1115, admission=admission)))
-    done = pb.dispatch(held, owners, observations, now=1120, effect=effects.append, admission=admission)
+    done = pb.dispatch(held, owners, observations, now=1120, effect=effects.append, executions=executions,
+                       admission=admission)
     steps.append(summarize('dispatch', done))
+    # Replaying the reserved snapshot must not run the effect a second time.
+    steps.append(summarize('replay-reserved-snapshot', pb.dispatch(held, owners, observations, now=1121,
+                           effect=effects.append, executions=executions, admission=admission)))
     steps.append(summarize('verify', pb.verify(done, dict(source='synthetic-progress-observer', observed_at=1400,
-                                                         job_id='train-70b', objective=0.9, achieved=0.93))))
+                                                         job_id='train-70b', metric=pb.METRIC, achieved=0.93))))
 
     # The working path degrades: the collector publishes a new revision with far less capacity.
     degraded = dataclasses.replace(observations[0], topology_revision=rev('ab-1/r2'), source_epoch=2,
@@ -301,7 +328,7 @@ def experiment():
     reasons = pb.revalidate(done, later, 1460, admission)
     steps.append(summarize('revalidate-after-degradation', pb.advance(done, status='invalidated', reasons=reasons)))
     try:
-        pb.dispatch(done, owners, later, 1460, effects.append, admission=admission)
+        pb.dispatch(done, owners, later, 1460, effects.append, executions=executions, admission=admission)
     except ValueError as exc:
         steps.append(dict(step='second-dispatch-refused', reasons=[str(exc)]))
     for grant in done.grants:
