@@ -42,8 +42,14 @@ def _count(name, value, *, optional=False):
 
 
 def _real(value):
-    """A finite int or float; booleans are not measurements."""
-    return type(value) in (int, float) and math.isfinite(value)
+    """A finite int or float; booleans are not measurements.
+
+    Integers are bounded before any float conversion, so 10**400 is refused
+    instead of raising OverflowError.
+    """
+    if type(value) is int:
+        return -MAX_INT <= value <= MAX_INT
+    return type(value) is float and math.isfinite(value)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,16 +104,21 @@ class PathObservation:
             raise ValueError(f'evidence_class must be one of {EVIDENCE_CLASSES}')
         for name in ('insertion_loss_db', 'bit_error_rate'):
             value = getattr(self, name)
-            if value is not None and (not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0):
+            if value is not None and (not _real(value) or value < 0):
                 raise ValueError(f'{name} must be finite and nonnegative or unknown')
         if not all(isinstance(m, Member) for m in self.members):
             raise ValueError('members must be Member records')
+
+    def shape(self):
+        """Digest of the endpoints, shared-risk groups and members a plan relies on."""
+        return digest([sorted(self.sites), None if self.srlgs is None else sorted(self.srlgs),
+                       sorted(dataclasses.astuple(m) for m in self.members)])
 
     def ref(self):
         return dict(path_id=self.path_id, topology_revision=self.topology_revision,
                     source=self.source, source_epoch=self.source_epoch,
                     observed_at=self.observed_at, expires_at=self.expires_at,
-                    evidence_class=self.evidence_class)
+                    evidence_class=self.evidence_class, shape=self.shape())
 
 
 def diversity(a, b):
@@ -289,6 +300,9 @@ def revalidate(plan, observations, now, admission=None):
                            f"not the planned {ref['source']} ({ref['evidence_class']})")
         elif current.topology_revision != ref['topology_revision'] or current.source_epoch != ref['source_epoch']:
             reasons.append(f"path {ref['path_id']} changed since the plan was made")
+        elif current.shape() != ref['shape']:
+            reasons.append(f"path {ref['path_id']} endpoints, shared-risk groups or members changed "
+                           f"at the same revision and epoch")
         elif now >= current.expires_at:
             reasons.append(f"path {ref['path_id']} observation expired")
     if admission is not None and not reasons:
@@ -367,8 +381,9 @@ def compensate(plan, owners, now):
 class EffectLedger:
     """Authoritative record of the effect run for each reservation (in-process simulation).
 
-    The execution identity is the plan id plus every grant's owner, key and
-    fencing token, so one reservation can start its effect once, including
+    The execution identity is the plan id plus the set of grants (owner, key,
+    fencing token) in canonical order, so one reservation can start its effect
+    once whatever order its grants were collected in, including
     under concurrent dispatch of the same snapshot. States are 'running',
     'done' and 'unknown'. An effect that ends without a clear result stays
     'unknown' and is not retried until an independent observer resolves it.
@@ -409,7 +424,7 @@ class EffectLedger:
 
 
 def execution_id(plan):
-    return digest([plan.plan_id, [[g.owner, g.key, g.token] for g in plan.grants]])
+    return digest([plan.plan_id, sorted([g.owner, g.key, g.token] for g in plan.grants)])
 
 
 def dispatch(plan, owners, observations, now, effect, *, executions, admission=None):

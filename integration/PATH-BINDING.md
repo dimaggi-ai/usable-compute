@@ -27,8 +27,9 @@ What the tests establish on synthetic evidence:
 - a lost owner reply leaves the plan outcome-unknown until reconciliation, and
   a retry with the same idempotency keys takes no further capacity;
 - each reservation runs its effect at most once: `EffectLedger` records an
-  execution identity (plan id plus every grant's owner, key and fencing token),
-  so replaying the reserved snapshot, or dispatching it concurrently, returns
+  execution identity (plan id plus the set of grants, each as owner, key and
+  fencing token, in canonical order, so a reconciled plan and a retried one
+  with the same grants match), so replaying the reserved snapshot, or dispatching it concurrently, returns
   `duplicate`; an effect that ends without a clear result stays
   `effect-unknown` and is not retried until an independent observer resolves it;
 - compensation releases held and unknown-outcome keys, then confirms with each
@@ -43,10 +44,13 @@ What the tests establish on synthetic evidence:
 - missing capacity, delay or optical-margin evidence refuses rather than
   defaulting;
 - revalidation binds each path's source and evidence class, not just its
-  revision and epoch; a replacement source invalidates the plan;
+  revision and epoch; a replacement source invalidates the plan. It also binds a
+  digest of the path's endpoints, shared-risk groups and members, so changing
+  any of them at the same revision and epoch invalidates the plan;
 - verification needs an independent observation after dispatch, measuring
   `goodput-fraction` against the objective fixed in the plan (a value in
-  (0, 1]). Booleans, NaN, infinities and negative values are rejected.
+  (0, 1]). Booleans, NaN, infinities, negative values and integers beyond
+  ±(2**53 - 1) are rejected as out of domain, not converted to float.
 
 Limits: the lease owners and the effect ledger are in-process simulations, the evidence is synthetic,
 and nothing contacts a controller, scheduler or device. The working-path claim is

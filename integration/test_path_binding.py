@@ -322,5 +322,56 @@ class ReviewFindings(unittest.TestCase):
             self.assertTrue(any('not the planned synthetic-path-collector (synthetic)' in r for r in result.reasons))
 
 
+
+class ReReviewFindings(unittest.TestCase):
+    """Regressions for Codex's re-review of PR #7 at fc865fc (findings 1-3)."""
+
+    def test_1_reconciled_grant_order_does_not_change_the_execution(self):
+        sites, observations, request, owners, admission = fixture()
+        owners['site-a'].lose_response.add('power')
+        plan = cs.plan(request, sites, observations, 1100)
+        unknown = pb.reserve(plan, owners, observations, 1110, admission=admission)
+        reconciled = pb.reconcile(unknown, owners, 1111)                     # lost grant appended last
+        retried = pb.reserve(plan, owners, observations, 1112, admission=admission)   # grants in claim order
+        self.assertEqual(sorted(reconciled.grants, key=lambda g: g.key), sorted(retried.grants, key=lambda g: g.key))
+        self.assertNotEqual(reconciled.grants, retried.grants)
+        executions, effects = pb.EffectLedger(), []
+        first = pb.dispatch(reconciled, owners, observations, 1120, effects.append, executions=executions)
+        second = pb.dispatch(retried, owners, observations, 1121, effects.append, executions=executions)
+        reversed_ = pb.dispatch(pb.advance(retried, grants=retried.grants[::-1]), owners, observations, 1122,
+                                effects.append, executions=executions)
+        self.assertEqual((first.stage, second.status, reversed_.status, len(effects)),
+                         ('dispatched', 'duplicate', 'duplicate', 1))
+
+    def test_2_endpoint_or_shared_risk_change_at_same_revision_invalidates(self):
+        for index, changes in ((1, dict(sites=('site-a', 'site-c'))), (1, dict(srlgs=('duct-east',))),
+                               (1, dict(members=(pb.Member('dcim', 'duct', 'east'),))),
+                               (0, dict(sites=('site-b', 'site-c')))):
+            sites, observations, request, owners, admission, held = held_fixture()
+            moved = list(observations)
+            moved[index] = dataclasses.replace(observations[index], **changes)          # same revision and epoch
+            effects = []
+            result = pb.dispatch(held, owners, tuple(moved), 1120, effects.append, executions=pb.EffectLedger(),
+                                 admission=admission)
+            self.assertEqual((result.status, effects), ('invalidated', []), changes)
+            self.assertTrue(any('shared-risk groups or members changed' in r for r in result.reasons), result.reasons)
+        # Reordering the same endpoints or groups is not a change.
+        sites, observations, request, owners, admission, held = held_fixture()
+        same = (dataclasses.replace(observations[0], sites=('site-b', 'site-a')),) + observations[1:]
+        self.assertEqual(pb.revalidate(held, same, 1120), ())
+
+    def test_3_huge_integers_are_out_of_domain_not_overflow(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        done = pb.dispatch(held, owners, observations, 1120, lambda p: None, executions=pb.EffectLedger())
+        for huge in (10**400, -10**400):
+            for bad in (dict(achieved=huge), dict(objective=huge)):
+                result = pb.verify(done, outcome(**bad))
+                self.assertEqual(result.status, 'unverified', bad)
+            with self.assertRaises(ValueError):
+                pb.advance(done, objective=huge)
+            for name in ('insertion_loss_db', 'bit_error_rate'):
+                with self.assertRaises(ValueError, msg=(name, huge > 0)):
+                    dataclasses.replace(observations[0], **{name: huge})
+
 if __name__ == '__main__':
     unittest.main()
