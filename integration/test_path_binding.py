@@ -343,9 +343,26 @@ class ReReviewFindings(unittest.TestCase):
         self.assertEqual((first.stage, second.status, reversed_.status, len(effects)),
                          ('dispatched', 'duplicate', 'duplicate', 1))
 
+    def test_1_ambiguous_effect_after_recovery_blocks_the_retried_reservation(self):
+        sites, observations, request, owners, admission = fixture()
+        owners['site-a'].lose_response.add('power')                          # claim 1 of 6: not the last
+        plan = cs.plan(request, sites, observations, 1100)
+        reconciled = pb.reconcile(pb.reserve(plan, owners, observations, 1110, admission=admission), owners, 1111)
+        retried = pb.reserve(plan, owners, observations, 1112, admission=admission)
+        executions, effects = pb.EffectLedger(), []
+
+        def ambiguous(plan):
+            effects.append(plan)
+            raise RuntimeError('lost reply')
+        first = pb.dispatch(reconciled, owners, observations, 1120, ambiguous, executions=executions)
+        second = pb.dispatch(retried, owners, observations, 1121, effects.append, executions=executions)
+        self.assertEqual((first.status, second.status, len(effects)), ('effect-unknown', 'duplicate', 1))
+
     def test_2_endpoint_or_shared_risk_change_at_same_revision_invalidates(self):
         for index, changes in ((1, dict(sites=('site-a', 'site-c'))), (1, dict(srlgs=('duct-east',))),
                                (1, dict(members=(pb.Member('dcim', 'duct', 'east'),))),
+                               (1, dict(srlgs=('duct-east',), members=(pb.Member('dcim', 'duct', 'east'),
+                                                                        pb.Member('ols', 'och', 'ab-1')))),
                                (0, dict(sites=('site-b', 'site-c')))):
             sites, observations, request, owners, admission, held = held_fixture()
             moved = list(observations)
