@@ -1,0 +1,492 @@
+{
+  "effects_run": 1,
+  "evidence_class": "synthetic",
+  "limits": "Simulated owners and synthetic evidence; no controller, scheduler or device was contacted.",
+  "not_checked": [
+    "Burst or per-step peak path demand: the working-path claim is the mean cut rate",
+    "Transition time in ledger durations: see packet C1 (stay/stitch deadline timing)",
+    "Communication model cross-check: netcap and the ledger stitch tax are different models",
+    "Storage path, NIC and switch-port capacity: no owner supplies them in this scenario",
+    "Real reservation owner: SimulatedLeaseOwner protects nothing outside this process",
+    "span: XP1 declared-vs-computed blast radius: no plant graph supplied, so the envelope's blast_radius was taken on trust",
+    "span: TN1 organization slice quota: no tenancy block on the envelope, so the organization's slice count in 'site-a' was taken on trust",
+    "span: TN2-TN4 wavelength sharing: no tenancy block on the envelope, so whatever else is on the stitch's wavelength was taken on trust"
+  ],
+  "schema": "dimaggi-path-binding/v1",
+  "steps": [
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [],
+      "stage": "admissible",
+      "status": "ok",
+      "step": "plan"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [],
+      "stage": "reserved",
+      "status": "ok",
+      "step": "reserve"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [
+        "accelerators has insufficient unreserved capacity"
+      ],
+      "stage": "admissible",
+      "status": "refused",
+      "step": "rival-reserve"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [],
+      "stage": "dispatched",
+      "status": "ok",
+      "step": "dispatch"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [],
+      "stage": "verified",
+      "status": "ok",
+      "step": "verify"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-1",
+          "revision": "5e9cbcc6598043fdd044b62ee72866463349f40a51bb580adeda7a56b428972a",
+          "role": "working-path",
+          "unit": "bytes/s"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "protection-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [
+        "path ab-1 changed since the plan was made"
+      ],
+      "stage": "dispatched",
+      "status": "invalidated",
+      "step": "revalidate-after-degradation"
+    },
+    {
+      "reasons": [
+        "only a fully reserved plan can be dispatched"
+      ],
+      "step": "second-dispatch-refused"
+    },
+    {
+      "claims": [],
+      "option": "refuse",
+      "reasons": [
+        "stitch: protection: path ab-1 cannot carry 800000000 B/s",
+        "move: ledger: the away hall cannot host the whole job (the destination-fleet precondition of ../calc)",
+        "stay: ledger: shrunk duration 96.0h misses the deadline (60.0h)"
+      ],
+      "stage": "modeled-feasible",
+      "status": "refused",
+      "step": "replan-protect-on-degraded-path"
+    },
+    {
+      "claims": [],
+      "option": "refuse",
+      "reasons": [
+        "stitch: protection: no path proven disjoint from ab-2 (unknown)",
+        "move: ledger: the away hall cannot host the whole job (the destination-fleet precondition of ../calc)",
+        "stay: ledger: shrunk duration 96.0h misses the deadline (60.0h)"
+      ],
+      "stage": "modeled-feasible",
+      "status": "refused",
+      "step": "replan-protect-via-unknown-diversity"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "working-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [],
+      "stage": "admissible",
+      "status": "ok",
+      "step": "replan-without-protection"
+    },
+    {
+      "claims": [
+        {
+          "amount": 512,
+          "owner": "site-a",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-a",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 512,
+          "owner": "site-b",
+          "resource": "accelerators",
+          "revision": null,
+          "role": "compute",
+          "unit": "accelerator"
+        },
+        {
+          "amount": 717,
+          "owner": "site-b",
+          "resource": "power",
+          "revision": null,
+          "role": "power",
+          "unit": "kW"
+        },
+        {
+          "amount": 800000000,
+          "owner": "transport",
+          "resource": "ab-2",
+          "revision": "2bcadd8fe8be250ce808cc42072d71473168e826c6dd934f20286679e73226c7",
+          "role": "working-path",
+          "unit": "bytes/s"
+        }
+      ],
+      "option": "stitch",
+      "reasons": [],
+      "stage": "reserved",
+      "status": "ok",
+      "step": "reserve-without-protection"
+    }
+  ]
+}

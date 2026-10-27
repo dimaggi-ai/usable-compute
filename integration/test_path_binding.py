@@ -1,0 +1,206 @@
+"""Build A acceptance cases from the 2026-10-26 networking brief, on synthetic evidence.
+
+Runs with the standard library: python3 -m unittest discover -s integration -p 'test_path_binding.py'
+"""
+import dataclasses
+import threading
+import unittest
+
+import cross_site as cs
+import path_binding as pb
+
+
+def fixture(**request_changes):
+    sites, observations, job = cs.scenario()
+    request = cs.CrossSiteRequest('train-70b', job, 'site-a', 'site-b', 'ab-1', 'ab-2', protection_required=True)
+    request = dataclasses.replace(request, **request_changes)
+    return sites, observations, request, cs.owners_for(sites, observations), cs.admission_check(sites)
+
+
+class PlanStages(unittest.TestCase):
+    def test_plan_binds_domain_results_paths_and_protection(self):
+        sites, observations, request, owners, admission = fixture()
+        plan = cs.plan(request, sites, observations, now=1100)
+        self.assertEqual((plan.option, plan.stage, plan.status), ('stitch', 'admissible', 'ok'))
+        roles = {c.role for c in plan.claims}
+        self.assertTrue({'compute', 'power', 'working-path', 'protection-path'} <= roles)
+        self.assertEqual(plan.domain['admission']['decision'], 'span')
+        self.assertIn('stay', plan.domain['rejected'])            # missed deadline, from the ledger
+        self.assertIn('move', plan.domain['rejected'])            # destination cannot hold the job
+        self.assertTrue(any(g.startswith('span: XP1') for g in plan.not_checked))
+        self.assertEqual(plan.valid_until, 1600)
+
+    def test_full_sequence_reaches_verified_only_with_independent_outcome(self):
+        sites, observations, request, owners, admission = fixture()
+        effects = []
+        held = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+        done = pb.dispatch(held, owners, observations, 1120, effects.append, admission=admission)
+        self.assertEqual((done.stage, len(effects)), ('dispatched', 1))
+        for bad in (dict(source='executor'), dict(observed_at=1120), dict(achieved=0.5), dict(job_id='other')):
+            outcome = dict(source='observer', observed_at=1300, job_id='train-70b', objective=0.9, achieved=0.95)
+            outcome.update(bad)
+            self.assertEqual(pb.verify(done, outcome).status, 'unverified', bad)
+        ok = pb.verify(done, dict(source='observer', observed_at=1300, job_id='train-70b', objective=0.9, achieved=0.95))
+        self.assertEqual(ok.stage, 'verified')
+
+
+class Reservations(unittest.TestCase):
+    def test_concurrent_requests_do_not_double_book(self):
+        sites, observations, request, owners, admission = fixture(protection_required=False)
+        # Path ab-1 carries 50 GB/s; each stitch claims 0.8 GB/s. Make accelerators plentiful so the path binds.
+        for site in ('site-a', 'site-b'):
+            owners[site].capacity['accelerators'] = 10**6
+            owners[site].capacity['power'] = 10**9
+        results, barrier = [], threading.Barrier(80)
+
+        def attempt(i):
+            plan = cs.plan(dataclasses.replace(request, job_id=f'job-{i}'), sites, observations, 1100)
+            barrier.wait()
+            results.append(pb.reserve(plan, owners, observations, 1110))
+        threads = [threading.Thread(target=attempt, args=(i,)) for i in range(80)]
+        [t.start() for t in threads]; [t.join() for t in threads]
+        reserved = [r for r in results if r.stage == 'reserved']
+        self.assertEqual(len(reserved), 62)                       # floor(50e9 / 0.8e9)
+        held = sum(g.amount for g in owners['transport'].grants.values() if g.resource == 'ab-1')
+        self.assertLessEqual(held, 50_000_000_000)
+        # Refused attempts that already held compute/power report them for compensation.
+        partial = [r for r in results if r.status == 'partial']
+        self.assertEqual(len(partial), 80 - 62)
+        for r in partial:
+            pb.compensate(r, owners)
+        self.assertEqual(sum(g.amount for g in owners['site-a'].grants.values() if g.resource == 'accelerators'), 62 * 512)
+
+    def test_expired_evidence_refuses_before_reservation_and_effect(self):
+        sites, observations, request, owners, admission = fixture()
+        plan = cs.plan(request, sites, observations, 1100)
+        late = pb.reserve(plan, owners, observations, 1600, admission=admission)
+        self.assertEqual(late.status, 'invalidated')
+        self.assertFalse(owners['transport'].grants)
+        stale = cs.plan(request, sites, observations, 1700)
+        self.assertEqual(stale.status, 'refused')
+        self.assertTrue(any('expired' in r for r in stale.reasons))
+
+    def test_lease_expiry_fences_dispatch(self):
+        sites, observations, request, owners, admission = fixture()
+        held = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110,
+                          lease_s=30, admission=admission)
+        effects = []
+        fenced = pb.dispatch(held, owners, observations, 1150, effects.append, admission=admission)
+        self.assertEqual((fenced.status, effects), ('invalidated', []))
+        self.assertTrue(any('lease' in r for r in fenced.reasons))
+
+    def test_changed_path_invalidates_plan(self):
+        sites, observations, request, owners, admission = fixture()
+        held = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+        changed = (dataclasses.replace(observations[0], topology_revision=cs.rev('ab-1/r2'), source_epoch=2),) + observations[1:]
+        owners['transport'].publish_revision('ab-1', changed[0].topology_revision)
+        effects = []
+        result = pb.dispatch(held, owners, changed, 1120, effects.append, admission=admission)
+        self.assertEqual((result.status, effects), ('invalidated', []))
+        self.assertTrue(any('ab-1 changed' in r for r in result.reasons))
+        self.assertTrue(any('revision changed after reservation' in r for r in result.reasons))
+
+    def test_owner_refuses_reservation_against_old_revision(self):
+        sites, observations, request, owners, admission = fixture()
+        plan = cs.plan(request, sites, observations, 1100)
+        owners['transport'].publish_revision('ab-1', cs.rev('ab-1/r2'))      # owner sees the change first
+        result = pb.reserve(plan, owners, observations, 1110, admission=admission)
+        self.assertEqual(result.status, 'partial')
+        self.assertTrue(result.grants)                                        # compute and power were taken
+        self.assertIn('revision changed', result.reasons[0])
+        undone = pb.compensate(result, owners)
+        self.assertEqual(undone.status, 'compensated')
+        self.assertFalse(any(owners[s].grants for s in ('site-a', 'site-b', 'transport')))
+        pb.compensate(result, owners)                                         # idempotent
+
+    def test_partial_success_is_inspectable_and_recoverable(self):
+        sites, observations, request, owners, admission = fixture()
+        owners['transport'].capacity['ab-2'] = 1                              # protection cannot be held
+        result = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+        self.assertEqual(result.status, 'partial')
+        self.assertEqual([g.resource for g in result.grants], ['accelerators', 'power', 'accelerators', 'power', 'ab-1'])
+        self.assertIn('ab-2', result.reasons[0])
+        with self.assertRaises(ValueError):
+            pb.dispatch(result, owners, observations, 1120, lambda p: None)
+        pb.compensate(result, owners)
+        self.assertFalse(owners['transport'].grants)
+
+    def test_lost_reply_is_unknown_then_reconciled_without_double_booking(self):
+        sites, observations, request, owners, admission = fixture()
+        owners['transport'].lose_response.add('ab-2')
+        plan = cs.plan(request, sites, observations, 1100)
+        first = pb.reserve(plan, owners, observations, 1110, admission=admission)
+        self.assertEqual((first.status, len(first.unknown)), ('outcome-unknown', 1))
+        reconciled = pb.reconcile(first, owners, 1112)
+        self.assertEqual((reconciled.stage, reconciled.status), ('reserved', 'ok'))
+        # A blind retry with the same keys returns the same grants rather than taking more capacity.
+        retry = pb.reserve(plan, owners, observations, 1113, admission=admission)
+        self.assertEqual([g.token for g in retry.grants], [g.token for g in reconciled.grants])
+        self.assertEqual(sum(g.amount for g in owners['transport'].grants.values() if g.resource == 'ab-2'), 800_000_000)
+
+    def test_lost_reply_for_unapplied_request_reconciles_to_partial(self):
+        sites, observations, request, owners, admission = fixture()
+        owners['transport'].lose_response.add('ab-2')
+        first = pb.reserve(cs.plan(request, sites, observations, 1100), owners, observations, 1110, admission=admission)
+        owners['transport'].release(first.unknown[0])                         # the owner never kept it
+        result = pb.reconcile(first, owners, 1112)
+        self.assertEqual(result.status, 'partial')
+        self.assertTrue(any('not held' in r for r in result.reasons))
+
+
+class Diversity(unittest.TestCase):
+    def setUp(self):
+        _, self.observations, _ = cs.scenario()
+
+    def test_names_from_different_authorities_are_not_assumed_disjoint(self):
+        ab1, ab2, ac1 = self.observations
+        self.assertEqual(pb.diversity(ab1, ab2), 'disjoint')
+        self.assertEqual(pb.diversity(ab2, ac1), 'unknown')                   # unknown SRLGs
+        relabeled = dataclasses.replace(ac1, srlgs=('duct-north',))
+        self.assertEqual(pb.diversity(ab2, relabeled), 'unknown')             # carrier vs dcim naming
+        shared = dataclasses.replace(ab2, srlgs=('duct-east',))
+        self.assertEqual(pb.diversity(ab1, shared), 'shared')
+
+    def test_protection_must_be_proven_disjoint(self):
+        sites, observations, request, owners, admission = fixture(protection_path='ac-1')
+        refused = cs.plan(dataclasses.replace(request, working_path='ab-2'), sites, observations, 1100)
+        self.assertEqual(refused.status, 'refused')
+        self.assertTrue(any('no path proven disjoint' in r for r in refused.reasons))
+
+    def test_unknown_measurements_refuse_instead_of_defaulting(self):
+        sites, observations, request, owners, admission = fixture()
+        blind = (dataclasses.replace(observations[0], capacity_bytes_per_s=None),) + observations[1:]
+        self.assertTrue(any('capacity is unknown' in r for r in cs.plan(request, sites, blind, 1100).reasons))
+        dark = (dataclasses.replace(observations[0], insertion_loss_db=None),) + observations[1:]
+        self.assertTrue(any('optical-margin' in r for r in cs.plan(request, sites, dark, 1100).reasons))
+
+
+class Contract(unittest.TestCase):
+    def test_observation_validation(self):
+        _, observations, _ = cs.scenario()
+        base = observations[0]
+        for change in (dict(expires_at=base.observed_at), dict(capacity_bytes_per_s=1.5),
+                       dict(evidence_class='measured'), dict(sites=('site-a', 'site-a')),
+                       dict(topology_revision='short'), dict(bit_error_rate=float('nan'))):
+            with self.assertRaises(ValueError, msg=change):
+                dataclasses.replace(base, **change)
+
+    def test_idempotency_key_cannot_be_reused_for_another_request(self):
+        owner = pb.SimulatedLeaseOwner('t', {'p': 10}, {'p': 'r'})
+        owner.reserve('p', 4, key='k', revision='r', lease_s=10, now=0)
+        with self.assertRaises(pb.Refused):
+            owner.reserve('p', 5, key='k', revision='r', lease_s=10, now=1)
+
+    def test_demonstrator_is_deterministic(self):
+        first, second = cs.experiment(), cs.experiment()
+        self.assertEqual(pb.digest(first), pb.digest(second))
+        steps = {s['step']: s for s in first['steps']}
+        self.assertEqual(steps['rival-reserve']['status'], 'refused')
+        self.assertEqual(steps['revalidate-after-degradation']['status'], 'invalidated')
+        self.assertEqual(steps['replan-protect-via-unknown-diversity']['status'], 'refused')
+        self.assertEqual(steps['reserve-without-protection']['stage'], 'reserved')
+        self.assertEqual(first['effects_run'], 1)
+
+
+if __name__ == '__main__':
+    unittest.main()
