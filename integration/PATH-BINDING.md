@@ -24,6 +24,12 @@ What the tests establish on synthetic evidence:
   grants they already hold so they can be compensated;
 - expired evidence, an expired lease or a changed topology revision blocks
   reservation or dispatch before any effect runs;
+- evidence dated after the check time is refused: planning returns a
+  structured refusal (not an exception), and reservation and dispatch are
+  invalidated before any grant or effect. Evidence observed exactly at the
+  check time is accepted. Span admission measures the evidence's age from the
+  older of the planned and current observation times, so neither a refreshed
+  nor a back-dated observation makes it look younger;
 - a lost owner reply leaves the plan outcome-unknown until reconciliation, and
   a retry with the same idempotency keys takes no further capacity;
 - each reservation runs its effect at most once: `EffectLedger` records an
@@ -56,4 +62,7 @@ Limits: the lease owners and the effect ledger are in-process simulations, the e
 and nothing contacts a controller, scheduler or device. The working-path claim is
 the mean cut rate, not the burst peak. Ledger durations omit stay and stitch
 transition time (packet C1). The fencing check and the effect are not one atomic
-step here; a real executor must check the fencing token itself. The output lists every gap under `not_checked`.
+step here; a real executor must check the fencing token itself. The check time
+is the caller's `now`; a trusted clock is the integrator's job. Older evidence
+at the same revision and epoch still passes while it is inside span's 300 s
+TTL: whether evidence may go backwards at all is an open contract question. The output lists every gap under `not_checked`.

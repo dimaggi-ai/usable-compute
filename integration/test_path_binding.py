@@ -390,5 +390,77 @@ class ReReviewFindings(unittest.TestCase):
                 with self.assertRaises(ValueError, msg=(name, huge > 0)):
                     dataclasses.replace(observations[0], **{name: huge})
 
+
+class FreshnessFindings(unittest.TestCase):
+    """Regressions for Codex's review of PR #7 at 9f8b312: path evidence dated after the check time."""
+
+    def test_future_dated_evidence_is_a_structured_planning_refusal(self):
+        for index, reason in ((0, 'path ab-1 observation is dated 1900, after the planning time 1100'),
+                              (1, 'protection: path ab-2 observation is dated 1900, after the planning time 1100')):
+            sites, observations, request, owners, admission = fixture()
+            moved = list(observations)
+            moved[index] = dataclasses.replace(observations[index], observed_at=1900, expires_at=2000)
+            plan = cs.plan(request, sites, tuple(moved), 1100)             # raised ValueError at 9f8b312
+            self.assertEqual(plan.status, 'refused', index)
+            self.assertTrue(any(reason in r for r in plan.reasons), plan.reasons)
+
+    def test_future_dated_evidence_refuses_reservation_before_any_grant(self):
+        sites, observations, request, owners, admission = fixture()
+        plan = cs.plan(request, sites, observations, 1100)
+        future = (dataclasses.replace(observations[0], observed_at=1900, expires_at=2000),) + observations[1:]
+        result = pb.reserve(plan, owners, future, 1110, admission=admission)
+        self.assertEqual((result.status, result.grants), ('invalidated', ()))
+        self.assertTrue(any('ab-1 observation is dated 1900, after the check time 1110' in r for r in result.reasons))
+        self.assertFalse(any(owners[s].grants for s in ('site-a', 'site-b', 'transport')))
+
+    def test_future_dated_evidence_refuses_dispatch_before_any_effect(self):
+        for index, observed, expires in ((0, 1900, 2000), (0, 1121, 1600), (1, 1121, 1600)):
+            sites, observations, request, owners, admission, held = held_fixture()
+            moved = list(observations)
+            moved[index] = dataclasses.replace(observations[index], observed_at=observed, expires_at=expires)
+            effects = []
+            result = pb.dispatch(held, owners, tuple(moved), 1120, effects.append, executions=pb.EffectLedger(),
+                                 admission=admission)
+            self.assertEqual((result.status, effects), ('invalidated', []), (index, observed))
+            path = observations[index].path_id
+            self.assertTrue(any(f'{path} observation is dated {observed}, after the check time 1120' in r
+                                for r in result.reasons), result.reasons)
+
+    def test_evidence_observed_at_the_check_time_is_accepted_and_expiry_still_fences(self):
+        sites, observations, request, owners, admission = fixture()
+        at = lambda t, **changes: tuple(dataclasses.replace(o, observed_at=t, **changes) for o in observations)
+        plan = cs.plan(request, sites, at(1100), 1100)
+        self.assertEqual((plan.stage, plan.status), ('admissible', 'ok'))
+        held = pb.reserve(plan, owners, at(1110), 1110, admission=admission)
+        self.assertEqual((held.stage, held.status), ('reserved', 'ok'))
+        expiring = pb.dispatch(held, owners, at(1100, expires_at=1120), 1120, lambda p: None,
+                               executions=pb.EffectLedger(), admission=admission)
+        self.assertEqual(expiring.status, 'invalidated')
+        self.assertTrue(any('observation expired' in r for r in expiring.reasons))
+        effects = []
+        done = pb.dispatch(held, owners, at(1120), 1120, effects.append, executions=pb.EffectLedger(),
+                           admission=admission)
+        self.assertEqual((done.stage, len(effects)), ('dispatched', 1))
+
+    def test_span_admission_refuses_rather_than_raises_on_future_evidence(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        rect = dict(held.domain['geometry:site-a']['requests'][0], site='site-a')
+        future = dataclasses.replace(observations[0], observed_at=1900, expires_at=2000)
+        verdict = cs.span_admission('train-70b', rect, future, 100, 1100, future.topology_revision)
+        self.assertEqual((verdict['decision'], verdict['passes_supplied_checks']), ('deny', False))
+        self.assertTrue(cs.admission_refusals(verdict))
+
+    def test_admission_measures_age_from_the_older_observation_time(self):
+        sites, observations, request, owners, admission, held = held_fixture()
+        latest = lambda t: {o.path_id: dataclasses.replace(o, observed_at=t) for o in observations}
+        self.assertTrue(admission(held, latest(1110), 1120)['passes_supplied_checks'])   # planned 1000: 120 s old
+        for current, now in ((700, 1120), (1340, 1350)):      # back-dated: 420 s; refreshed: planned is 350 s old
+            verdict = admission(held, latest(current), now)
+            self.assertFalse(verdict['passes_supplied_checks'], current)
+            self.assertTrue(any('past the 300s TTL' in r for r in verdict['reasons']), verdict['reasons'])
+        # Older evidence still inside the TTL passes. Whether evidence may go backwards at all is an open
+        # contract question (Codex, 9f8b312 review), not decided here.
+        self.assertTrue(admission(held, latest(900), 1120)['passes_supplied_checks'])
+
 if __name__ == '__main__':
     unittest.main()

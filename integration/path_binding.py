@@ -303,6 +303,9 @@ def revalidate(plan, observations, now, admission=None):
         elif current.shape() != ref['shape']:
             reasons.append(f"path {ref['path_id']} endpoints, shared-risk groups or members changed "
                            f"at the same revision and epoch")
+        elif current.observed_at > now:
+            reasons.append(f"path {ref['path_id']} observation is dated {current.observed_at}, "
+                           f"after the check time {now}")
         elif now >= current.expires_at:
             reasons.append(f"path {ref['path_id']} observation expired")
     if admission is not None and not reasons:

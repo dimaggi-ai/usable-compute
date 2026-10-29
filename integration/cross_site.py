@@ -84,6 +84,10 @@ def geometry(site, job_id, gpus):
 
 def span_admission(job_id, rect, path, power_headroom_kw, now, current_revision):
     """Span-contract verdict for a crossing over `path`, checked against the plant's current revision."""
+    if path.observed_at > now:
+        return {'passes_supplied_checks': False, 'decision': 'deny',
+                'reasons': [f'path {path.path_id} observation is dated {path.observed_at}, after the check time {now}'],
+                'not_checked': []}
     if path.rtt_us is None or path.capacity_bytes_per_s is None or path.insertion_loss_db is None or path.bit_error_rate is None:
         return {'passes_supplied_checks': False, 'decision': 'deny',
                 'reasons': [f'path {path.path_id} lacks delay, capacity or optical-margin evidence'], 'not_checked': []}
@@ -120,6 +124,8 @@ def plan(request, sites, observations, now):
         path_gap = f'path {request.working_path} has no observation'
     elif set(working.sites) != {home.site_id, away.site_id}:
         path_gap = f"path {working.path_id} joins {'/'.join(working.sites)}, not {home.site_id}/{away.site_id}"
+    elif working.observed_at > now:
+        path_gap = f'path {working.path_id} observation is dated {working.observed_at}, after the planning time {now}'
     elif now >= working.expires_at:
         path_gap = f'path {working.path_id} observation expired'
     elif working.capacity_bytes_per_s is None or working.rtt_us is None:
@@ -176,6 +182,9 @@ def plan(request, sites, observations, now):
                 elif set(protection.sites) != set(working.sites):
                     reasons.append(f"protection: path {protection.path_id} joins {'/'.join(protection.sites)}, "
                                    f"not the working endpoints")
+                elif protection.observed_at > now:
+                    reasons.append(f'protection: path {protection.path_id} observation is dated '
+                                   f'{protection.observed_at}, after the planning time {now}')
                 elif protection.capacity_bytes_per_s is None or now >= protection.expires_at:
                     reasons.append(f'protection: path {protection.path_id} lacks fresh capacity evidence')
                 elif demand > protection.capacity_bytes_per_s:
@@ -227,7 +236,9 @@ def admission_check(sites):
 
     Both the working and the protection path are rechecked. Everything it needs
     comes from the plan itself, so a re-plan on another path is checked against
-    that path.
+    that path. Evidence age is measured from the older of the planned and the
+    current observation time, so neither a refreshed nor a back-dated
+    observation makes the evidence look younger.
     """
     def check(plan, latest, now):
         if plan.option != 'stitch':
@@ -240,8 +251,9 @@ def admission_check(sites):
             if claim.role not in ('working-path', 'protection-path'):
                 continue
             planned = next(e for e in plan.evidence if e['path_id'] == claim.resource)
-            replayed = dataclasses.replace(latest[claim.resource], topology_revision=planned['topology_revision'],
-                                           observed_at=planned['observed_at'])
+            current = latest[claim.resource]
+            replayed = dataclasses.replace(current, topology_revision=planned['topology_revision'],
+                                           observed_at=min(planned['observed_at'], current.observed_at))
             verdict = span_admission(plan.job_id, rect, replayed, home.power_kw - home_kw, now,
                                      latest[claim.resource].topology_revision)
             refused = verdict['reasons'] or [f"span decision {verdict['decision']}"]
